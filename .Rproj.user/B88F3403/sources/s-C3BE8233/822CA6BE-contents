@@ -1,0 +1,4640 @@
+---
+title: 'Study Results: Transition from University to Work (UK Study)'
+author: "Anne-Kathrin Kleine"
+date: "2/27/2020"
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 1
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '1'
+bibliography: UK_Study.bib
+---
+                                  
+```{r loading_packs, eval = T, include = F, echo = F}
+knitr::opts_chunk$set(include = F, echo = F, warning = F, message = F)
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("mediation", "foreign", "tidyverse","stargazer","multicon", "ggplot2", "plyr", "reshape2", "readxl", 
+              "scales", "grid", "tidyLPA", "Rcpp", "naniar", "dplyr", "car", "mice", 
+              "rstudioapi", "labelled", "modi", "semPlot", "kulife")
+ipak(packages)
+
+citation()
+```
+
+```{r setwd, include = FALSE, echo = FALSE}
+# library(rstudioapi)
+# set_wd <- function() {
+#   current_path <- getActiveDocumentContext()$path 
+#   setwd(dirname(current_path ))
+#   print( getwd() )
+# }
+# set_wd()
+```
+
+```{r loading_data, cache = TRUE}
+
+options(knitr.table.format = function() {
+  if (knitr::is_latex_output()) 'latex' else 'pandoc'
+})
+
+library(rlang)
+library(tidyverse)
+library(foreign)
+files <- dir(getwd(), pattern = "\\.sav$", full.names = FALSE) 
+df_list <- vector("list", length(files))
+names(df_list) <- files
+read_in <- function(df = files) {
+  for (fname in df) {
+    df_list[[fname]] <- haven::read_sav(fname, encoding = NULL, user_na = FALSE, col_select = NULL,skip = 0, n_max = Inf, .name_repair = "unique") 
+  }
+    names(df_list) <- paste0("raw_data", gsub(".sav","",names(df_list)))
+    ff <- df_list
+}
+
+
+df_list <- read_in(files)
+
+list2env(df_list,envir=.GlobalEnv)
+
+raw_data_T1 <- as.data.frame(raw_dataT1) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+raw_data_T2 <- as.data.frame(raw_dataT2) %>%
+  dplyr::rename(
+    DurationT2 = Duration__in_seconds_
+    )
+
+raw_data_T3 <- as.data.frame(raw_dataT3) %>%
+  dplyr::rename(
+    DurationT3 = Duration__in_seconds_
+    )
+
+raw_data_T4 <- as.data.frame(raw_dataT4) %>%
+  dplyr::rename(
+    DurationT4 = Duration__in_seconds_
+    )
+attributes(raw_data_T1$T1aem1_1)
+
+nrow(raw_data_T2)
+
+
+
+
+
+
+raw_data_Grad2_T1 <- as.data.frame(raw_dataGrad2_T1) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+raw_data_Grad2_T1_2 <- as.data.frame(raw_dataGrad2_T1_2) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+raw_data_Grad2_T1 <- rbind(raw_data_Grad2_T1, raw_data_Grad2_T1_2)
+
+raw_data_Grad2_T2 <- as.data.frame(raw_dataGrad2_T2) %>% 
+  dplyr::rename(
+    DurationT1 = Duration__in_seconds_
+    )
+
+View(raw_data_Grad2$t1cplan_1)
+
+raw_data_Grad2 <- left_join(raw_data_Grad2_T1, raw_data_Grad2_T2, c("t1id"="t2id")) %>%
+  mutate_at(vars(c("t1cplan_1", "t1cplan_5","t1cplan_6",## recode cplanning
+                   "t2cplan_1","t2cplan_5","t2cplan_6")),
+            ~ (6 - .))
+
+```
+
+```{r joining, cache = TRUE, dependson = "loading_data"}
+raw_data_T1 = raw_data_T1 %>% 
+  filter(str_detect(T1ID, "5")) %>%  # this dplyr::selects only the rows containing "5"in ID column
+  distinct(T1ID, .keep_all = TRUE) # this removes all rows that do not have a distnct ID entry 
+
+raw_data_T2 = raw_data_T2 %>% 
+  filter(str_detect(T2ID, "5")) %>% 
+  distinct(T2ID, .keep_all = TRUE)
+
+raw_data_T3 = raw_data_T3 %>% 
+  filter(str_detect(T3ID, "5")) %>% 
+  distinct(T3ID, .keep_all = TRUE)
+
+raw_data_T4 = raw_data_T4 %>% 
+  filter(str_detect(T4ID, "5")) %>% 
+  distinct(T4ID, .keep_all = TRUE)
+
+
+## join them and keep all entries from T1
+T1T2 <- left_join(raw_data_T1, raw_data_T2, c("T1ID" = "T2ID"))
+T1T2T3 <- left_join(T1T2, raw_data_T3, c("T1ID"="T3ID"))
+T1T2T3T4 <- left_join(T1T2T3, raw_data_T4, c("T1ID"="T4ID")) %>%
+  .[rowSums(is.na(.[,28:145])) != ncol(.[,28:145])] %>%  ## delete if missingness on all variables
+    dplyr::select(DurationT1, T1ID,T1PP_1:t1age, t1lang, t1prevjob_1: t1prevjob_7, 
+         t1study, t1stime, t1grad, 
+         t2job:t2heal1, 
+         j3job, t3job, t3job_1: t3heal1, 
+         j4job, t4job, t4job_1: t4heal1) %>%
+  dplyr::rename(
+    att_1_T1 = T1PP_6,
+    att_2_T1 = t1se_5,
+    att_3_T1 = t1ogoal_8,
+    att_1_T3 = t3se_5,
+    att_2_T3 = T3fit_6,
+    att_3_T3 = T3mean_6,
+    att_1_T4 = t4se_5,
+    att_2_T4 = T4fit_6,
+    att_3_T4 = T4mean_6,
+  ) %>%
+  mutate_at(vars(c("t1cplan_1.x", "t1cplan_5.x","t1cplan_6.x",## recode cplanning
+                   "t1cplan_1.y","t1cplan_5.y","t1cplan_6.y")),
+            ~ (6 - .))
+
+```
+
+```{r fatigue}
+# T1T2T3T4 <- T1T2T3T4 %>% # add fatigue item for fatigue scale
+#   mutate(t1PANA_15_2 = t1PANA_15,
+#          t2PANA_15_2 = t2PANA_15,
+#          t3PANA_15_2 = t3PANA_15,
+#          t4PANA_15_2 = t4PANA_15)
+```
+
+```{r make_age_num}
+library(tidyverse)
+names(Filter(is.character, T1T2T3T4))
+T1T2T3T4 <- T1T2T3T4 %>%
+  mutate_at(vars("t1age"), ~as.numeric(.))
+```
+
+```{r rename, cache = TRUE, dependson = "loading_data"}
+## rename scale items
+T1T2T3T4 = T1T2T3T4 %>% 
+  dplyr::rename(
+    t1se_5 = t1se_6,
+    t1se_6 = t1se_7,
+    t1se_7 = t1se_8,
+    t1se_8 = t1se_9,
+    t3se_5 = t3se_6,
+    t3se_6 = t3se_7,
+    t3se_7 = t3se_8,
+    t3se_8 = t3se_9,
+    t1TFPa_1 = t1TF_1,
+    t1TFPa_2 = t1TF_2,
+    t1TFPa_3 = t1TF_3,
+    t1TFPa_4 = t1TF_4,
+    t1TFPr_1 = t1TF_5,
+    t1TFPr_2 = t1TF_6,
+    t1TFPr_3 = t1TF_7,
+    t1TFPr_4 = t1TF_8,
+    t1TFFu_1 = t1TF_9,
+    t1TFFu_2 = t1TF_10,
+    t1TFFu_3 = t1TF_11,
+    t1TFFu_4 = t1TF_12,
+    t1cpl_1 = t1cplan_1.x,
+    t1cpl_2 = t1cplan_2.x,
+    t1cpl_3 = t1cplan_3.x,
+    t1cpl_4 = t1cplan_4.x,
+    t1cpl_5 = t1cplan_5.x,
+    t1cpl_6 = t1cplan_6.x,
+    T1gaemp_1 = T1aem1_1,
+    T1gaemp_2 = T1aem1_2,
+    T1gaemp_3 = T1aem1_3,
+    T1gaemp_4 = T1aem1_4,
+    T1gaemn_1 = T1aem1_5,
+    T1gaemn_2 = T1aem1_6,
+    T1gaemn_3 = T1aem1_7,
+    T1gaemn_4 = T1aem1_8,
+    T1jaemp_1 = T1aem2_1,
+    T1jaemp_2 = T1aem2_2,
+    T1jaemp_3 = T1aem2_3,
+    T1jaemp_4 = T1aem2_4,
+    T1jaemn_1 = T1aem2_5,
+    T1jaemn_2 = T1aem2_6,
+    T1jaemn_3 = T1aem2_7,
+    T1jaemn_4 = T1aem2_8,
+    T1chjf_1 = T1apgetj_1,
+    T1chjf_2 = T1apgetj_2,
+    T1chjf_3 = T1apgetj_3,
+    T1hajf_1 = T1apgetj_4,
+    T1hajf_2 = T1apgetj_5,
+    T1hajf_3 = T1apgetj_6,
+    T1chjs_1 = t1apjob_1,
+    T1chjs_2 = t1apjob_2,
+    T1chjs_3 = t1apjob_3,
+    T1hajs_1 = t1apjob_4,
+    T1hajs_2 = t1apjob_5,
+    T1hajs_3 = t1apjob_6,
+    t1NA_1 = t1PANA_1,
+    t1NA_2 = t1PANA_2,
+    t1PA_1 = t1PANA_3,
+    t1NA_3 = t1PANA_4,
+    t1PA_2 = t1PANA_5,
+    t1PA_3 = t1PANA_6,
+    t1NA_4 = t1PANA_7,
+    t1NA_5 = t1PANA_8,
+    t1NA_6 = t1PANA_9,
+    t1FA_1 = t1PANA_10,
+    t1PA_4 = t1PANA_11,
+    t1PA_5 = t1PANA_12,
+    t1PA_6 = t1PANA_13,
+    t1PA_7 = t1PANA_14,
+    t1NA_7_FA_2 = t1PANA_15,
+    t1NA_8 = t1PANA_16,
+    t1NA_9 = t1PANA_17,
+    t1FA_3 = t1PANA_18,
+    t1NA_10 = t1PANA_19,
+    t1PA_8 = t1PANA_20,
+    t1PA_9 = t1PANA_21,
+    t1PA_10 = t1PANA_22,
+    t2cpl_1 = t1cplan_1.y,
+    t2cpl_2 = t1cplan_2.y,
+    t2cpl_3 = t1cplan_3.y,
+    t2cpl_4 = t1cplan_4.y,
+    t2cpl_5 = t1cplan_5.y,
+    t2cpl_6 = t1cplan_6.y,
+    T2gaemp_1 = T2aem1_1,
+    T2gaemp_2 = T2aem1_2,
+    T2gaemp_3 = T2aem1_3,
+    T2gaemp_4 = T2aem1_4,
+    T2gaemn_1 = T2aem1_5,
+    T2gaemn_2 = T2aem1_6,
+    T2gaemn_3 = T2aem1_7,
+    T2gaemn_4 = T2aem1_8,
+    T2jaemp_1 = T2aem2_1,
+    T2jaemp_2 = T2aem2_2,
+    T2jaemp_3 = T2aem2_3,
+    T2jaemp_4 = T2aem2_4,
+    T2jaemn_1 = T2aem2_5,
+    T2jaemn_2 = T2aem2_6,
+    T2jaemn_3 = T2aem2_7,
+    T2jaemn_4 = T2aem2_8,
+    T2chjf_1 = T2apgetj_1,
+    T2chjf_2 = T2apgetj_2,
+    T2chjf_3 = T2apgetj_3,
+    T2hajf_1 = T2apgetj_4,
+    T2hajf_2 = T2apgetj_5,
+    T2hajf_3 = T2apgetj_6,
+    T2chjs_1 = t2apjob_1,
+    T2chjs_2 = t2apjob_2,
+    T2chjs_3 = t2apjob_3,
+    T2hajs_1 = t2apjob_4,
+    T2hajs_2 = t2apjob_5,
+    T2hajs_3 = t2apjob_6,
+    t2NA_1 = t2PANA_1,
+    t2NA_2 = t2PANA_2,
+    t2PA_1 = t2PANA_3,
+    t2NA_3 = t2PANA_4,
+    t2PA_2 = t2PANA_5,
+    t2PA_3 = t2PANA_6,
+    t2NA_4 = t2PANA_7,
+    t2NA_5 = t2PANA_8,
+    t2NA_6 = t2PANA_9,
+    t2FA_1 = t2PANA_10,
+    t2PA_4 = t2PANA_11,
+    t2PA_5 = t2PANA_12,
+    t2PA_6 = t2PANA_13,
+    t2PA_7 = t2PANA_14,
+    t2NA_7_FA_2 = t2PANA_15,
+    t2NA_8 = t2PANA_16,
+    t2NA_9 = t2PANA_17,
+    t2FA_3 = t2PANA_18,
+    t2NA_10 = t2PANA_19,
+    t2PA_8 = t2PANA_20,
+    t2PA_9 = t2PANA_21,
+    t2PA_10 = t2PANA_22,
+    t3TFPa_1 = t3TF_1,
+    t3TFPa_2 = t3TF_2,
+    t3TFPa_3 = t3TF_3,
+    t3TFPa_4 = t3TF_4,
+    t3TFPr_1 = t3TF_5,
+    t3TFPr_2 = t3TF_6,
+    t3TFPr_3 = t3TF_7,
+    t3TFPr_4 = t3TF_8,
+    t3TFFu_1 = t3TF_9,
+    t3TFFu_2 = t3TF_10,
+    t3TFFu_3 = t3TF_11,
+    t3TFFu_4 = t3TF_12,
+    T3pofit_1 = T3fit_1,
+    T3pofit_2 = T3fit_2,
+    T3pofit_3 = T3fit_3,
+    T3nsfit_1 = T3fit_4,
+    T3nsfit_2 = T3fit_5,
+    T3nsfit_3 = T3fit_7,
+    T3dafit_1 = T3fit_8,
+    T3dafit_2 = T3fit_9,
+    T3dafit_3 = T3fit_10,
+    t3NA_1 = t3PANA_1,
+    t3NA_2 = t3PANA_2,
+    t3PA_1 = t3PANA_3,
+    t3NA_3 = t3PANA_4,
+    t3PA_2 = t3PANA_5,
+    t3PA_3 = t3PANA_6,
+    t3NA_4 = t3PANA_7,
+    t3NA_5 = t3PANA_8,
+    t3NA_6 = t3PANA_9,
+    t3FA_1 = t3PANA_10,
+    t3PA_4 = t3PANA_11,
+    t3PA_5 = t3PANA_12,
+    t3PA_6 = t3PANA_13,
+    t3PA_7 = t3PANA_14,
+    t3NA_7_FA_2 = t3PANA_15,
+    t3NA_8 = t3PANA_16,
+    t3NA_9 = t3PANA_17,
+    t3FA_3 = t3PANA_18,
+    t3NA_10 = t3PANA_19,
+    t3PA_8 = t3PANA_20,
+    t3PA_9 = t3PANA_21,
+    t3PA_10 = t3PANA_22,
+    t4TFPa_1 = t4TF_1,
+    t4TFPa_2 = t4TF_2,
+    t4TFPa_3 = t4TF_3,
+    t4TFPa_4 = t4TF_4,
+    t4TFPr_1 = t4TF_5,
+    t4TFPr_2 = t4TF_6,
+    t4TFPr_3 = t4TF_7,
+    t4TFPr_4 = t4TF_8,
+    t4TFFu_1 = t4TF_9,
+    t4TFFu_2 = t4TF_10,
+    t4TFFu_3 = t4TF_11,
+    t4TFFu_4 = t4TF_12,
+    t4pofit_1 = T4fit_1,
+    t4pofit_2 = T4fit_2,
+    t4pofit_4 = T4fit_3,
+    t4nsfit_1 = T4fit_4,
+    t4nsfit_2 = T4fit_5,
+    t4nsfit_4 = T4fit_7,
+    t4dafit_1 = T4fit_8,
+    t4dafit_2 = T4fit_9,
+    t4dafit_4 = T4fit_10,
+    t4NA_1 = t4PANA_1,
+    t4NA_2 = t4PANA_2,
+    t4PA_1 = t4PANA_3,
+    t4NA_3 = t4PANA_4,
+    t4PA_2 = t4PANA_5,
+    t4PA_3 = t4PANA_6,
+    t4NA_4 = t4PANA_7,
+    t4NA_5 = t4PANA_8,
+    t4NA_6 = t4PANA_9,
+    t4FA_1 = t4PANA_10,
+    t4PA_4 = t4PANA_11,
+    t4PA_5 = t4PANA_12,
+    t4PA_6 = t4PANA_13,
+    t4PA_7 = t4PANA_14,
+    t4NA_7_FA_2 = t4PANA_15,
+    t4NA_8 = t4PANA_16,
+    t4NA_9 = t4PANA_17,
+    t4FA_3 = t4PANA_18,
+    t4NA_10 = t4PANA_19,
+    t4PA_8 = t4PANA_20,
+    t4PA_9 = t4PANA_21,
+    t4PA_10 = t4PANA_22,
+  )
+
+
+
+```
+
+``` {r att_fail_out, cache = TRUE, dependson = "rename"}
+T1T2T3T4 <- T1T2T3T4 %>% 
+       drop_na(matches("t1se_|t1wor|t1cpl|t2se_|t2wor|t2cpl"))
+
+T1T2T3T4_fails = T1T2T3T4 %>% dplyr::select(att_1_T1,att_2_T1,att_3_T1,
+                                 att_1_T3,att_2_T3,att_3_T3,
+                                 att_1_T4,att_2_T4,att_3_T4)
+
+## create attention fails df 
+att_1_T1 <- T1T2T3T4[T1T2T3T4$att_1_T1 %in% c(2, 3, 4, 5,6,7), ]
+att_2_T1 <- T1T2T3T4[T1T2T3T4$att_2_T1 %in% c(2, 3, 4), ]
+att_3_T1 <- T1T2T3T4[T1T2T3T4$att_3_T1 %in% c(2, 3, 4), ]
+att_1_T3 <- T1T2T3T4[T1T2T3T4$att_1_T3 %in% c(2, 3, 4,5), ]
+att_2_T3 <- T1T2T3T4[T1T2T3T4$att_2_T3 %in% c(2, 3, 4), ]
+att_3_T3 <- T1T2T3T4[T1T2T3T4$att_3_T3 %in% c(2, 3, 4, 5), ]
+att_1_T4 <- T1T2T3T4[T1T2T3T4$att_1_T4 %in% c(2, 3, 4,5), ]
+att_2_T4 <- T1T2T3T4[T1T2T3T4$att_2_T4 %in% c(2, 3, 4), ]
+att_3_T4 <- T1T2T3T4[T1T2T3T4$att_3_T4 %in% c(2, 3, 4, 5), ]
+
+
+(attention_fail <- rbind(att_1_T1, att_2_T1, att_3_T1, 
+                        att_1_T3,att_2_T3,att_3_T3,
+                        att_1_T4,att_2_T4,att_3_T4) %>%
+  as_tibble(.)) 
+
+(ID_vals <- data.frame(table(attention_fail$T1ID)))
+(Rows_fails <- attention_fail$T1ID %in% ID_vals[ID_vals$Freq > 1,1])
+(Att_fails <- attention_fail[Rows_fails,])
+
+(data.frame(table(Att_fails$T1ID)))
+
+## exclude attention fails (two or more fails)
+my_dat <- T1T2T3T4[!(T1T2T3T4$T1ID %in% Att_fails$T1ID),]
+
+# create attention check variable
+att_check = my_dat %>% dplyr::select(att_1_T1,att_2_T1,att_3_T1,
+                                   att_1_T3,att_2_T3,att_3_T3,
+                                   att_1_T4,att_2_T4,att_3_T4)
+
+```
+
+```{r rename_jobexp}
+my_dat = my_dat %>% 
+  dplyr::rename(
+    t1preint = t1prevjob_1,
+    t1presu = t1prevjob_2,
+    t1prevo = t1prevjob_3,
+    t1prept = t1prevjob_4,
+    t1preft = t1prevjob_5,
+    t1prese = t1prevjob_6,
+    t1preot = t1prevjob_7)
+```
+
+```{r to_lower}
+names(my_dat) <- tolower(names(my_dat))
+```
+
+```{r rename_anticipation, cache = TRUE, dependson = "rename"}
+my_dat = my_dat %>% 
+  dplyr::rename(
+    t1angra = t1antic_1,
+    t1anful = t1antic_2,
+    t1anpar = t1antic_3,
+    t1ansel = t1antic_4,
+    t1anint = t1antic_5,
+    t1anune = t1antic_6)
+
+my_dat = my_dat %>% 
+  dplyr::rename(
+    t2angra = t2antic_1,
+    t2anful = t2antic_2,
+    t2anpar = t2antic_3,
+    t2ansel = t2antic_4,
+    t2anint = t2antic_5,
+    t2anune = t2antic_6)
+
+my_dat = my_dat %>% 
+  dplyr::rename(
+    t3angra = t3antic_1,
+    t3anful = t3antic_2,
+    t3anpar = t3antic_3,
+    t3ansel = t3antic_4,
+    t3anint = t3antic_5,
+    t3anune = t3antic_6)
+
+my_dat = my_dat %>% 
+  dplyr::rename(
+    t4angra = t4antic_1,
+    t4anful = t4antic_2,
+    t4anpar = t4antic_3,
+    t4ansel = t4antic_4,
+    t4anint = t4antic_5,
+    t4anune = t4antic_6)
+```
+
+```{r dummy_job_exp}
+my_dat <- my_dat %>%
+  mutate_at(vars(matches("t1pre")), ~replace(., is.na(.), 0)) 
+```
+
+```{r recode_anticipation}
+my_dat <- my_dat %>% mutate_at(vars(matches("t3an|t4an")), funs(ifelse(. == 6, 0, .)))
+```
+
+``` {r difftime_grad}
+## create date variable (graduation)
+library(lubridate) 
+my_dat$t1grad_new<- parse_date_time(my_dat$t1grad, orders = c("dmY", 
+                                                "BY", "dBY",
+                                                "bY", "dmy",
+                                                "BdY", "Y", "y"),
+                      exact = FALSE, 
+                      train = F,
+                      drop = FALSE) %>% as.Date(.)
+
+my_dat$grad_date1 <- ifelse(my_dat$t1grad_new < as.Date("2020-01-01"), 1, NA) 
+
+my_dat$grad_date2 <- ifelse(my_dat$t1grad_new < as.Date("2021-01-01"), 2, NA) 
+
+my_dat$grad_date3 <- ifelse(my_dat$t1grad_new < as.Date("2022-01-01"), 3, NA) 
+
+my_dat$grad_date4 <- ifelse(my_dat$t1grad_new < as.Date("2023-01-01"), 4, NA) 
+
+my_dat$grad_date5 <- ifelse(my_dat$t1grad_new < as.Date("2024-01-01"), 5, NA) 
+
+my_dat$grad_date6 <- ifelse(my_dat$t1grad_new >= as.Date("2024-01-01"), 6, NA) 
+
+
+my_dat <- my_dat %>% mutate(grad_date = coalesce(grad_date1,grad_date2,grad_date3,grad_date4,grad_date5,grad_date6)) 
+sum(my_dat$grad_date == 6, na.rm = T)  
+
+## for complete data set 
+no_na <- my_dat %>%
+       drop_na(matches("t1se_|t1wor|t1cpl|t2se_|t2wor|t2cpl"))
+sum(no_na$grad_date == 5, na.rm = T)  
+
+
+```
+
+``` {r studies}
+my_dat$t1study[my_dat$t1study == "Politics"] = 1
+my_dat$t1study[my_dat$t1study == "BA in Politics"] = 1
+my_dat$t1study[my_dat$t1study == "Social policy"] = 1
+my_dat$t1study[my_dat$t1study == "Policing Studies"] = 1
+my_dat$t1study[my_dat$t1study == "Politics and Modern History"] = 1
+my_dat$t1study[my_dat$t1study == "Political Science"] = 1
+my_dat$t1study[my_dat$t1study == "political science"] = 1
+
+my_dat$t1study[my_dat$t1study == "Business studies"] = 2
+my_dat$t1study[my_dat$t1study == "Business Economics"] = 2
+my_dat$t1study[my_dat$t1study == "Finance"] = 2
+my_dat$t1study[my_dat$t1study == "Hospitality Management"] = 2
+my_dat$t1study[my_dat$t1study == "Business Economics and Marketing"] = 2
+my_dat$t1study[my_dat$t1study == "Hone economics"] = 2
+my_dat$t1study[my_dat$t1study == "Business and Admin"] = 2
+my_dat$t1study[my_dat$t1study == "BA Business Management"] = 2
+my_dat$t1study[my_dat$t1study == "business management and Japanese studies"] = 2
+my_dat$t1study[my_dat$t1study == "Banking & Finance"] = 2
+my_dat$t1study[my_dat$t1study == "Accounting for Management"] = 2
+my_dat$t1study[my_dat$t1study == "Business and Management"] = 2
+my_dat$t1study[my_dat$t1study == "Financial Management degree"] = 2
+my_dat$t1study[my_dat$t1study == "Accountancy"] = 2
+my_dat$t1study[my_dat$t1study == "BSc Economics"] = 2
+my_dat$t1study[my_dat$t1study == "Accounts"] = 2
+my_dat$t1study[my_dat$t1study == "Business and Management"] = 2
+my_dat$t1study[my_dat$t1study == "Master of Business Administration"] = 2
+my_dat$t1study[my_dat$t1study == "Economics"] = 2
+my_dat$t1study[my_dat$t1study == "Business management"] = 2
+my_dat$t1study[my_dat$t1study == "Business"] = 2
+my_dat$t1study[my_dat$t1study == "accounting degree"] = 2
+my_dat$t1study[my_dat$t1study == "Not sure what a study program is, but I am enrolled in a university course currently (BA in Economics) if that's what this question is looking for."] = 2
+my_dat$t1study[my_dat$t1study == "Management and Business"] = 2
+my_dat$t1study[my_dat$t1study == "BsC (Hons) Supply Chain and Business Management"] = 2
+my_dat$t1study[my_dat$t1study == "Business and Management course at the University of Portsmouth"] = 2
+my_dat$t1study[my_dat$t1study == "Business Management with Marketing"] = 2
+my_dat$t1study[my_dat$t1study == "Tourism management"] = 2
+my_dat$t1study[my_dat$t1study == "Economics (BA)"] = 2
+my_dat$t1study[my_dat$t1study == "Business Studies with Marketing (with Honours)"] = 2
+my_dat$t1study[my_dat$t1study == "Ba Economics"] = 2
+my_dat$t1study[my_dat$t1study == "Management"] = 2
+my_dat$t1study[my_dat$t1study == "Veterinary Nursing and Practice Management"] = 2
+my_dat$t1study[my_dat$t1study == "Business Management (Marketing)"] = 2
+my_dat$t1study[my_dat$t1study == "economics and politics"] = 2
+my_dat$t1study[my_dat$t1study == "Finance undergraduate degree"] = 2
+my_dat$t1study[my_dat$t1study == "Business and Human Resources Management"] = 2
+my_dat$t1study[my_dat$t1study == "Business and management"] = 2
+my_dat$t1study[my_dat$t1study == "Management and Leadership"] = 2
+my_dat$t1study[my_dat$t1study == "Tourism Management"] = 2
+my_dat$t1study[my_dat$t1study == "Risk managent"] = 2
+
+my_dat$t1study[my_dat$t1study == "Computing degree"] = 3
+my_dat$t1study[my_dat$t1study == "Computing at college"] = 3
+my_dat$t1study[my_dat$t1study == "Computing and IT"] = 3
+my_dat$t1study[my_dat$t1study == "Computer Science"] = 3
+my_dat$t1study[my_dat$t1study == "Computer Science and Mathematics"] = 3
+my_dat$t1study[my_dat$t1study == "Computer science"] = 3
+my_dat$t1study[my_dat$t1study == "BSc Computer Science"] = 3
+my_dat$t1study[my_dat$t1study == "Computing and IT"] = 3
+my_dat$t1study[my_dat$t1study == "Games Computing"] = 3
+my_dat$t1study[my_dat$t1study == "computer science"] = 3
+my_dat$t1study[my_dat$t1study == "Msc Robotics"] = 3
+my_dat$t1study[my_dat$t1study == "Msc Computer Science"] = 3
+my_dat$t1study[my_dat$t1study == "Computer Games Development, Strength and Conditioning"] = 3
+my_dat$t1study[my_dat$t1study == "Games Design"] = 3
+
+my_dat$t1study[my_dat$t1study == "Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "BSc Psychology with Criminology"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology MA"] = 4
+my_dat$t1study[my_dat$t1study == "Health Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology at Cambridge"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology and Criminology"] = 4
+my_dat$t1study[my_dat$t1study == "psychology"] = 4
+my_dat$t1study[my_dat$t1study == "psychology in education"] = 4
+my_dat$t1study[my_dat$t1study == "MSc Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology and counselling"] = 4
+my_dat$t1study[my_dat$t1study == "BSc (Honours) Psychology with Counselling"] = 4
+my_dat$t1study[my_dat$t1study == "Early Years and Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology degree"] = 4
+my_dat$t1study[my_dat$t1study == "Forensic Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "Psychology, English and history"] = 4
+my_dat$t1study[my_dat$t1study == "Bsc Social Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "psychology bsc"] = 4
+my_dat$t1study[my_dat$t1study == "MSc Forensic Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "MSci Psychology"] = 4
+my_dat$t1study[my_dat$t1study == "BSc Psychology"] = 4
+
+my_dat$t1study[my_dat$t1study == "Medicine"] = 5
+my_dat$t1study[my_dat$t1study == "Foundation Medicine"] = 5
+my_dat$t1study[my_dat$t1study == "biomedical engineering"] = 5
+my_dat$t1study[my_dat$t1study == "Healthcare"] = 5
+my_dat$t1study[my_dat$t1study == "Pharmacy"] = 5
+my_dat$t1study[my_dat$t1study == "Medical Biochemistry"] = 5
+my_dat$t1study[my_dat$t1study == "medicine"] = 5
+my_dat$t1study[my_dat$t1study == "Master of Pharmacy"] = 5
+my_dat$t1study[my_dat$t1study == "Master of Pharmacy undergraduate course"] = 5
+my_dat$t1study[my_dat$t1study == "biomedical science"] = 5
+my_dat$t1study[my_dat$t1study == "Dentistry degree"] = 5
+my_dat$t1study[my_dat$t1study == "Medical ultrasound"] = 5
+my_dat$t1study[my_dat$t1study == "MPharm"] = 5
+my_dat$t1study[my_dat$t1study == "Radiigraphy"] = 5
+my_dat$t1study[my_dat$t1study == "Immunology Honours"] = 5
+my_dat$t1study[my_dat$t1study == "Optometry"] = 5
+my_dat$t1study[my_dat$t1study == "Msc pre hospital care"] = 5
+
+my_dat$t1study[my_dat$t1study == "Electronic & Electrical Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Masters in Chemical Engineerin"] = 6
+my_dat$t1study[my_dat$t1study == "MEng Chemical Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Mechanical engineering"] = 6
+my_dat$t1study[my_dat$t1study == "university degree marine engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Glasgow Caledonian University for Computer Aided Mechanical Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Aerospace engineering"] = 6
+my_dat$t1study[my_dat$t1study == "chemical engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Masters in Chemical Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Electrical and Electronic Engineering"] = 6
+my_dat$t1study[my_dat$t1study == "Beng"] = 6
+
+my_dat$t1study[my_dat$t1study == "History BA"] = 7
+my_dat$t1study[my_dat$t1study == "English"] = 7
+my_dat$t1study[my_dat$t1study == "English Literature MA"] = 7
+my_dat$t1study[my_dat$t1study == "English Literature"] = 7
+my_dat$t1study[my_dat$t1study == "English lit and journalism"] = 7
+my_dat$t1study[my_dat$t1study == "History"] = 7
+my_dat$t1study[my_dat$t1study == "Philosophy"] = 7
+my_dat$t1study[my_dat$t1study == "Philosophy, Religion and Ethics"] = 7
+my_dat$t1study[my_dat$t1study == "History Ba"] = 7
+my_dat$t1study[my_dat$t1study == "English Li"] = 7
+my_dat$t1study[my_dat$t1study == "English Literature and Creative Writing"] = 7
+my_dat$t1study[my_dat$t1study == "classical contemporary text"] = 7
+my_dat$t1study[my_dat$t1study == "Theology"] = 7
+my_dat$t1study[my_dat$t1study == "Japanese Studies"] = 7
+my_dat$t1study[my_dat$t1study == "English undergraduate degree"] = 7
+my_dat$t1study[my_dat$t1study == "BA French and Drama"] = 7
+my_dat$t1study[my_dat$t1study == "Human Sciences"] = 7
+my_dat$t1study[my_dat$t1study == "Spanish studies"] = 7
+my_dat$t1study[my_dat$t1study == "Oriental Studies"] = 7
+my_dat$t1study[my_dat$t1study == "English Lit"] = 7
+my_dat$t1study[my_dat$t1study == "development studies and anthropology"] = 7
+
+my_dat$t1study[my_dat$t1study == "Law"] = 8
+my_dat$t1study[my_dat$t1study == "BA Law"] = 8
+my_dat$t1study[my_dat$t1study == "LLB"] = 8
+my_dat$t1study[my_dat$t1study == "Law LLB"] = 8
+my_dat$t1study[my_dat$t1study == "Llb law"] = 8
+my_dat$t1study[my_dat$t1study == "Degree in law with criminology"] = 8
+my_dat$t1study[my_dat$t1study == "Law and International Relations"] = 8
+my_dat$t1study[my_dat$t1study == "Law with Psychology LLB"] = 8
+my_dat$t1study[my_dat$t1study == "Batchelor of Law"] = 8
+my_dat$t1study[my_dat$t1study == "Law and criminology LLB"] = 8
+my_dat$t1study[my_dat$t1study == "Criminology"] = 8
+my_dat$t1study[my_dat$t1study == "Criminal justice"] = 8
+my_dat$t1study[my_dat$t1study == "Analytical and forensic science"] = 8
+my_dat$t1study[my_dat$t1study == "law"] = 8
+
+my_dat$t1study[my_dat$t1study == "Animal behaviour"] = 9
+my_dat$t1study[my_dat$t1study == "Zoology"] = 9
+my_dat$t1study[my_dat$t1study == "Zoo Biology"] = 9
+my_dat$t1study[my_dat$t1study == "Zoology degree"] = 9
+my_dat$t1study[my_dat$t1study == "Animal biology"] = 9
+my_dat$t1study[my_dat$t1study == "Zoology"] = 9
+my_dat$t1study[my_dat$t1study == "Equine Studies"] = 9
+
+my_dat$t1study[my_dat$t1study == "Social Work"] = 10
+my_dat$t1study[my_dat$t1study == "counselling children and adolesents"] = 10
+my_dat$t1study[my_dat$t1study == "Learning Development and Support"] = 10
+my_dat$t1study[my_dat$t1study == "education"] = 10
+my_dat$t1study[my_dat$t1study == "PGDE Secondary French Teaching"] = 10
+my_dat$t1study[my_dat$t1study == "Master of Social Work"] = 10
+my_dat$t1study[my_dat$t1study == "Childcare"] = 10
+my_dat$t1study[my_dat$t1study == "Primary education"] = 10
+my_dat$t1study[my_dat$t1study == "Education"] = 10
+my_dat$t1study[my_dat$t1study == "BA HONS Primary Education"] = 10
+my_dat$t1study[my_dat$t1study == "Health and social care"] = 10
+my_dat$t1study[my_dat$t1study == "social work"] = 10
+my_dat$t1study[my_dat$t1study == "Childhood Studies"] = 10
+
+my_dat$t1study[my_dat$t1study == "Nutrition"] = 11
+my_dat$t1study[my_dat$t1study == "Anatomical Science"] = 11
+my_dat$t1study[my_dat$t1study == "Sport and Exercise Science"] = 11
+my_dat$t1study[my_dat$t1study == "Sports Therapy"] = 11
+my_dat$t1study[my_dat$t1study == "Sport Science"] = 11
+my_dat$t1study[my_dat$t1study == "Sport science"] = 11
+my_dat$t1study[my_dat$t1study == "Sport and exercise science"] = 11
+
+my_dat$t1study[my_dat$t1study == "Chemistry BSc"] = 12
+my_dat$t1study[my_dat$t1study == "Chemistry"] = 12
+my_dat$t1study[my_dat$t1study == "Chemistry degree"] = 12
+
+my_dat$t1study[my_dat$t1study == "Film and post production"] = 13
+my_dat$t1study[my_dat$t1study == "Graphic Design"] = 13
+my_dat$t1study[my_dat$t1study == "Interior Design"] = 13
+my_dat$t1study[my_dat$t1study == "Fine Art"] = 13
+my_dat$t1study[my_dat$t1study == "BA 2nd year Journalism, Creative Writing And English Literature"] = 13
+my_dat$t1study[my_dat$t1study == "fine art"] = 13
+my_dat$t1study[my_dat$t1study == "Design"] = 13
+my_dat$t1study[my_dat$t1study == "Fashion Communication"] = 13
+my_dat$t1study[my_dat$t1study == "Media Production"] = 13
+my_dat$t1study[my_dat$t1study == "Communication Design"] = 13
+my_dat$t1study[my_dat$t1study == "Arts"] = 13
+my_dat$t1study[my_dat$t1study == "graphic design"] = 13
+my_dat$t1study[my_dat$t1study == "Film"] = 13
+my_dat$t1study[my_dat$t1study == "Film, Photography"] = 13
+my_dat$t1study[my_dat$t1study == "graphic design"] = 13
+my_dat$t1study[my_dat$t1study == "Undergraduate at Drama School"] = 13
+my_dat$t1study[my_dat$t1study == "Ba Internet Design"] = 13
+my_dat$t1study[my_dat$t1study == "Music Technology"] = 13
+my_dat$t1study[my_dat$t1study == "M.Mus"] = 13
+my_dat$t1study[my_dat$t1study == "university - BM"] = 13
+
+my_dat$t1study[my_dat$t1study == "Biology"] = 14
+my_dat$t1study[my_dat$t1study == "biology"] = 14
+my_dat$t1study[my_dat$t1study == "BSc Biomedical Sciences"] = 14
+my_dat$t1study[my_dat$t1study == "Neuroscience"] = 14
+
+my_dat$t1study[my_dat$t1study == "nursing"] = 15
+my_dat$t1study[my_dat$t1study == "Nursing degree"] = 15
+my_dat$t1study[my_dat$t1study == "Midwifery"] = 15
+my_dat$t1study[my_dat$t1study == "Adult Nursing Degree"] = 15
+my_dat$t1study[my_dat$t1study == "Nursing"] = 15
+
+my_dat$t1study[my_dat$t1study == "Mathematics"] = 16
+my_dat$t1study[my_dat$t1study == "Maths"] = 16
+my_dat$t1study[my_dat$t1study == "Mathematics degree"] = 16
+my_dat$t1study[my_dat$t1study == "MATHS WITH FINANCE"] = 16
+my_dat$t1study[my_dat$t1study == "Maths msci"] = 16
+my_dat$t1study[my_dat$t1study == "Theoretical Physics"] = 16
+
+my_dat$t1study[my_dat$t1study == "Speech Pathology and Therapy"] = 17
+my_dat$t1study[my_dat$t1study == "Speech pathology"] = 17
+
+my_dat$t1study[my_dat$t1study == "Ecology"] = 18
+my_dat$t1study[my_dat$t1study == "Environmental Science Degree"] = 18
+my_dat$t1study[my_dat$t1study == "BSC Geography"] = 18
+my_dat$t1study[my_dat$t1study == "Human Geography (MA)"] = 18
+
+my_dat$t1study[my_dat$t1study == "information advice and guidance"] = 19
+my_dat$t1study[my_dat$t1study == "Open university"] = 19
+my_dat$t1study[my_dat$t1study == "Natural Sciences"] = 19
+my_dat$t1study[my_dat$t1study == "The open uni"] = 19
+my_dat$t1study[my_dat$t1study == "university"] = 19
+my_dat$t1study[my_dat$t1study == "University"] = 19
+my_dat$t1study[my_dat$t1study == "university"] = 19
+my_dat$t1study[my_dat$t1study == "Undergraduate degree"] = 19
+my_dat$t1study[my_dat$t1study == "N/A"] = 19
+my_dat$t1study[my_dat$t1study == "masters degree"] = 19
+my_dat$t1study[my_dat$t1study == "Diploma in social sciences"] = 19
+my_dat$t1study[my_dat$t1study == "MA Honours degree"] = 19
+my_dat$t1study[my_dat$t1study == "Natural sciences"] = 19
+my_dat$t1study[my_dat$t1study == "Undergraduate at University"] = 19
+my_dat$t1study[my_dat$t1study == "Bachelor degree"] = 19
+my_dat$t1study[my_dat$t1study == "Natural sciences"] = 19
+my_dat$t1study[my_dat$t1study == "Combined STEM"] = 19
+my_dat$t1study[my_dat$t1study == "Placement"] = 19
+my_dat$t1study[my_dat$t1study == "The open university degree program"] = 19
+my_dat$t1study[my_dat$t1study == "Undergraduate"] = 19
+my_dat$t1study[my_dat$t1study == "This one."] = 19
+my_dat$t1study[my_dat$t1study == "tutoring"] = 19
+my_dat$t1study[my_dat$t1study == "University Of Lincoln"] = 19
+my_dat$t1study[my_dat$t1study == "Bachelor's degree"] = 19
+my_dat$t1study[my_dat$t1study == "a degree"] = 19
+my_dat$t1study[my_dat$t1study == "PPLE amsterdam"] = 19
+my_dat$t1study[my_dat$t1study == "uni"] = 19
+my_dat$t1study[my_dat$t1study == ""] = 19
+
+my_dat$t1study <- as.numeric(my_dat$t1study)
+
+sort(table(my_dat$t1study),decreasing=T)
+
+# 1 = Politics = Social Sciences 
+# 2 = Business and Economics 
+# 3 = Computer Science 
+# 4 = Psychology
+# 5 = Medicine 
+# 6 = Mechanical or Electrical Engineering 
+# 7 = History, Linguistics = Humanities 
+# 8 = Law
+# 9 = Veterinary Studies
+# 10 = Social Work 
+# 11 = Sport and Nutrition 
+# 12 = Chemistry 
+
+# 13 = Film / Graphic Design = Art 
+# 14 = Biology 
+# 15 = Nursing 
+# 16 = Mathematics / Physics 
+# 17 = Speech Pathology 
+# 18 = other 
+
+```
+
+```{r change_order, cache = TRUE, dependson = "rename"}
+my_dat2 = my_dat
+T1PA <- my_dat %>% 
+  dplyr::select(., matches("t1pa_"))
+T2PA <- my_dat %>% 
+  dplyr::select(., matches("t2pa_"))
+T3PA <- my_dat %>% 
+  dplyr::select(., matches("t3pa_"))
+T4PA <- my_dat %>% 
+  dplyr::select(., matches("t4pa_"))
+
+T1na <- my_dat %>% 
+  dplyr::select(., matches("t1na_"))
+T2na <- my_dat %>% 
+  dplyr::select(., matches("t2na_"))
+T3na <- my_dat %>% 
+  dplyr::select(., matches("t3na_"))
+T4na <- my_dat %>% 
+  dplyr::select(., matches("t4na_"))
+
+T1fa <- my_dat %>% 
+  dplyr::select(., matches("t1fa_"))
+T2fa <- my_dat %>% 
+  dplyr::select(., matches("t2fa_"))
+T3fa <- my_dat %>% 
+  dplyr::select(., matches("t3fa_"))
+T4fa <- my_dat %>% 
+  dplyr::select(., matches("t4fa_"))
+
+T1panafa <- cbind(T1PA, T1na, T1fa)
+T2panafa <- cbind(T2PA, T2na, T2fa)
+T3panafa <- cbind(T3PA, T3na, T3fa)
+T4panafa <- cbind(T4PA, T4na, T4fa)
+
+pa_out <- my_dat[, -grep(c("^t.pa_."), colnames(my_dat))]
+pana_out <- pa_out[, -grep(c("t.na_."), colnames(pa_out))]
+panafa_out <- pana_out[, -grep(c("t.fa_."), colnames(pana_out))]
+app_t1_panafa <- as_tibble(append(panafa_out, T1panafa, after = 2))
+app_t2_panafa <- as_tibble(append(app_t1_panafa, T2panafa, after = 133))
+app_t3_panafa <- as_tibble(append(app_t2_panafa, T3panafa, after = 221))
+app_t4_panafa <- as_tibble(append(app_t3_panafa, T4panafa, after = 297))
+
+attcont <- app_t4_panafa %>% 
+  dplyr::select(., matches("att_"))
+
+no_att_con <- app_t4_panafa %>% dplyr::select(., -contains("att_"))
+my_dat <- no_att_con[, c(1,2,359:361, 3:358)]
+```
+
+```{r outlier_detect, eval = F}
+## exclude singular columna
+library(modi)
+library(tidyverse)
+library(haven)
+# zap labels 
+mahal_dat <- my_dat %>% 
+  zap_label(.) %>%
+  zap_labels(.) %>%
+  .[ , purrr::map_lgl(., is.numeric)]
+alpha <- .001
+mahal <- mahal_dat[, c(2:length(mahal_dat))] %>%
+  dplyr::select(-matches("t.an.*")) %>%
+  dplyr::select(-matches("att_"))
+COV <- cov(mahal, use = "pairwise.complete.obs", method = "pearson")
+MD2 <- MDmiss(mahal, colMeans(mahal, na.rm = T), COV)
+cutoff <- (qchisq(p = 1 - alpha, df = ncol(mahal)))
+
+names_outliers_MH <- which(MD2 > cutoff)
+names_outliers_MH
+length(names_outliers_MH)
+
+```
+
+``` {r prepare_mplus, cache = TRUE, dependson = "rename"}
+library(haven)
+library(MplusAutomation)
+library(sjlabelled)
+# zap labels 
+mplus_dat <- my_dat %>% 
+  remove_all_labels(.) %>%
+  .[ , purrr::map_lgl(., is.numeric)]
+
+names(Filter(is.character, mplus_dat))
+prepareMplusData(mplus_dat, "mplusdat.dat")
+```
+
+``` {r prepare_xml, cache = TRUE, dependson = "rename"}
+# library(XML)
+# getwd()
+# xml_df <- mplus_dat %>% 
+#   dplyr::select(., matches("t1cpl_|t1se_|t1wor_|t2cpl_|t2se_|t2wor_")) %>%
+#   tibble::rowid_to_column(., "ID")
+# 
+# write.table(xml_df, "xml_df.txt", append = FALSE, sep = ", ", dec = ".",
+#             row.names = TRUE, col.names = TRUE)
+# 
+# 
+# # zap labels 
+# mplus_dat <- my_dat %>% 
+#   zap_label(.) %>%
+#   zap_labels(.) %>%
+#   .[ , purrr::map_lgl(., is.numeric)]
+# 
+# library(XML)    
+# write.xml(mplus_dat, file="mydata.xml")
+```
+
+```{r sample_chars, echo = F, include = T}
+library(sjlabelled)
+my_dat <- my_dat[!is.na(my_dat$t1cpl_1),]
+
+mydat_multi <- my_dat %>% 
+  remove_all_labels(.) %>%
+     mutate_at("t2job", funs(dplyr::recode(., `1` = 2L, `3` = 2L, `2` = 1L, `4` = 1L)))
+
+library(tidyverse)
+descr <- mydat_multi %>%
+  dplyr::select(t1sex, t1age, t1lang, t2job) %>%
+  mutate(Percent_Female = ((mean(my_dat$t1sex, na.rm = T)-1)*100)) %>%
+  group_by(Percent_Female) %>% 
+  summarise("Percent Female" = ((mean(mydat_multi$t1sex, na.rm = T)-1)*100), "N Female" = sum(mydat_multi$t1sex == 2), "Mean Age" = mean(mydat_multi$t1age, na.rm = T), "Percent English-speaking" = (2-mean(my_dat$t1lang, na.rm = T))*100,"N English-speaking" = sum(my_dat$t1lang), "Percent job found at T2" = ((mean(mydat_multi$t2job, na.rm = T)-1)*100)) %>% 
+  round(., digits = 2)
+
+range(mydat_multi$t1age)
+
+sd(mydat_multi$t1age)
+sum(mydat_multi$t2job == 1, na.rm = T)
+
+sum(mydat_multi$t1lang == 1)
+
+sum(mydat_multi$t1stime == 2)
+
+299/254
+
+45/299
+
+library(kableExtra)
+kable(descr, caption = "Sample Characteristics") %>%
+  kable_styling("striped", full_width = F) 
+```
+
+```{r prepare_comp_alph_df}
+library(tidyverse)
+library(multicon)
+library(psych)
+
+comp_dat <- my_dat %>%
+  dplyr::select(matches("t.pa_|t.na_|t.pp_|t.se_|t.ogoal_|t.fpa_|t.fpr_|t.ffu_|t.cpl_|t.search_|t.wor_|t.an|
+                  t.scom_|t.gaemp_|t.gaemn_|t.jaemp_|t.jaemn_|t.chjf_|t.hajf_|t.chjs_|t.hajs|
+                  t.empse_|t.se_|t.pofit_|t.nsfit_|t.dafit_|t.jobsa_|t.mean_"))
+
+alph_dat <- my_dat %>%
+  dplyr::select(matches("t.pa_|t.na_|t.pp_|t.se_|t.ogoal_|t.fpa_|t.fpr_|t.ffu_|t.cpl_|t.search_|t.wor_|
+                  t.scom_|t.gaemp_|t.gaemn_|t.jaemp_|t.jaemn_|t.chjf_|t.hajf_|t.chjs_|t.hajs|
+                  t.empse_|t.se_|t.pofit_|t.nsfit_|t.dafit_|t.jobsa_|t.mean_"))
+
+
+comp_split <- comp_dat %>%
+  split.default(sub("_.*", "", names(comp_dat))) 
+
+alph_split <- alph_dat %>%
+  split.default(sub("_.*", "", names(alph_dat))) 
+
+comp <- map(comp_split, ~ multicon::composite(.x, nomiss = 0.8), data = .x)
+alph <- map(alph_split, ~ psych::alpha(.x), data = .x) %>%
+  map(~ .x$total)
+
+# add demos
+names(mydat_multi)
+demos <- my_dat %>% 
+  remove_all_labels(.) %>%
+     mutate_at("t2job", funs(dplyr::recode(., `1` = 2L, `3` = 2L, `2` = 1L, `4` = 1L))) %>% dplyr::select(matches("t1date_diff|t1heal|t1sex|t1age|t1lang|t2job|t2heal|j3job|t3heal|j4job|t4heal"))
+
+comp_df <- do.call("cbind", comp) %>%
+  cbind(demos, .)
+alph_df <- do.call("rbind", alph) %>% round(., 2)
+```
+
+# Reliabilities 
+``` {r reliabilities, include = T, echo = F}
+alph_df %>%
+DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"),
+                   pageLength = 20))
+
+```
+
+# Correlations
+```{r corr_table}
+cor <- round(cor(comp_df, use="pairwise.complete.obs"), 2)
+
+corstars <-function(x, method=c("pearson", "spearman"), removeTriangle=c("upper", "lower", "none"),
+                     result=c("none", "html", "latex")){
+    #Compute correlation matrix
+    require(Hmisc)
+    x <- as.matrix(x)
+    correlation_matrix<-rcorr(x, type=method[1])
+    R <- correlation_matrix$r # Matrix of correlation coeficients
+    p <- correlation_matrix$P # Matrix of p-value 
+    
+    ## Define notions for significance levels; spacing is important.
+    mystars <- ifelse(p < .001, "*** ", ifelse(p < .01, "**  ", ifelse(p < .05, "*   ", "    ")))
+    
+    ## trunctuate the correlation matrix to two decimal
+    R <- format(round(cbind(rep(-1.11, ncol(x)), R), 2))[,-1]
+    
+    ## build a new matrix that includes the correlations with their apropriate stars
+    Rnew <- matrix(paste(R, mystars, sep=""), ncol=ncol(x))
+    diag(Rnew) <- paste(diag(R), " ", sep="")
+    rownames(Rnew) <- colnames(x)
+    colnames(Rnew) <- paste(colnames(x), "", sep="")
+    
+    ## remove upper triangle of correlation matrix
+    if(removeTriangle[1]=="upper"){
+      Rnew <- as.matrix(Rnew)
+      Rnew[upper.tri(Rnew, diag = TRUE)] <- ""
+      Rnew <- as.data.frame(Rnew)
+    }
+    
+    ## remove lower triangle of correlation matrix
+    else if(removeTriangle[1]=="lower"){
+      Rnew <- as.matrix(Rnew)
+      Rnew[lower.tri(Rnew, diag = TRUE)] <- ""
+      Rnew <- as.data.frame(Rnew)
+    }
+    else if(removeTriangle[1]=="none"){
+      Rnew <- as.matrix(Rnew)
+      Rnew <- as.data.frame(Rnew)
+    }
+    
+    ## remove last column and return the correlation matrix
+    Rnew <- cbind(Rnew[1:length(Rnew)-1])
+    if (result[1]=="none") return(Rnew)
+    else{
+      if(result[1]=="html") print(xtable(Rnew), type="html")
+      else print(xtable(Rnew), type="latex") 
+    }
+} 
+library(kableExtra)
+
+corstar <- data.frame(corstars(comp_df, removeTriangle = "none", result="none"))
+
+```
+
+``` {r corr_table1, include = T, echo = F}
+corstar %>%
+  DT::datatable(
+    extensions = 'Buttons', 
+    options = list(dom = 'Bfrtip', 
+                   buttons = c('excel', "csv"),
+                   pageLength = 35,
+                  lengthMenu = c(25, 50, 75, 94)))
+
+```
+
+# Confirmatory Factor Analyses {.tabset}
+## Model comparison model variables: One vs. two vs. three factors 
+
+```{r function_generate_fit_measures}
+library(lavaan)
+library(glue)
+generate_cfa_fitmeasures <- function(myfit) {
+fm <- fitmeasures(myfit) 
+dat <- data.frame(lapply(fm, type.convert), stringsAsFactors=FALSE)
+dat <- dat %>% as_tibble()%>% 
+  mutate_if(is.numeric, round, digits = 3) %>% 
+  mutate_if(is.numeric, format, nsmall = 3) %>% 
+  mutate(rmsea.ci.lower = glue("{rmsea.ci.lower}-{rmsea.ci.upper}")) %>% 
+  dplyr::select(Chi_Sq = chisq,
+                     df = df,
+                     p = pvalue,
+                     CFI = cfi,
+                     TLI = tli, 
+                     AIC = aic, 
+                     BIC = bic, 
+                     RMSEA = rmsea,
+                     RMSEA.CI = rmsea.ci.lower,
+                     SRMR = srmr) %>%
+  print(dat)
+}
+```
+
+```{r function_generate_loadings}
+generate_cfa_loadings <- function(myfit, mygroup){
+  estimates <- parameterestimates(myfit, ci = TRUE, level = 0.95, standardized = TRUE) %>%   
+    filter(op == "=~") %>% 
+    mutate(stars = ifelse(pvalue < .001, "***",
+                          ifelse(pvalue < .01, "**",
+                          ifelse(pvalue < .05, "*", "")))) %>%
+    as_tibble() %>%
+    mutate_if(is.numeric, round, digits=2) %>% 
+    mutate_if(is.numeric, format, nsmall = 2)%>% 
+    mutate( est = glue("{est} CI({ci.lower}-{ci.upper})"),
+            Beta = glue("{std.all}{stars}"))%>% 
+    dplyr::select(lhs,
+                  question=rhs,
+                  est = est,
+                  Beta)
+  names(estimates)[c(2,3)] <- paste(mygroup, names(estimates)[c(2,3)], sep = '-')
+  estimates
+}
+```
+
+```{r CFA_one_fac}
+# Set the names of the dataframe
+col_names_load <- c("Factor", "Item", "Est(95 % CI)","Beta")
+## One factor model
+factor_analysis_df<- mplus_dat[!is.na(mplus_dat$t1cpl_1),] %>%
+ dplyr::select(., matches("t1cpl_|t1se_|t1wor_"))
+
+names(factor_analysis_df) %>% str_c(., collapse = " + ")
+
+
+# CFA
+mod.one_fac <- 'One_fac  =~  t1se_1 + t1se_2 + t1se_3 + t1se_4 + t1se_5 + t1se_6 + t1se_7 + t1se_8 + 
+t1cpl_1 + t1cpl_2 + t1cpl_3 + t1cpl_4 + t1cpl_5 + t1cpl_6 + 
+t1wor_1 + t1wor_2 + t1wor_3 + t1wor_4'
+
+# Generate the Lavaan model
+fit.One_fac<- cfa(mod.one_fac, data = factor_analysis_df, meanstructure = TRUE, std.lv = TRUE, estimator = 'MLR') 
+```
+
+```{r CFA_two_facs}
+# CFA
+mod.two_fac <- 'One_fac  =~  t1se_1 + t1se_2 + t1se_3 + t1se_4 + t1se_5 + t1se_6 + t1se_7 + t1se_8 + t1cpl_1 + t1cpl_2 + t1cpl_3 + t1cpl_4 + t1cpl_5 + t1cpl_6
+                Two_fac  =~ t1wor_1 + t1wor_2 + t1wor_3 + t1wor_4'
+
+# Generate the Lavaan model
+fit.Two_fac<- cfa(mod.two_fac, data = factor_analysis_df, meanstructure = TRUE, std.lv = TRUE, estimator = 'MLR')
+```
+
+```{r CFA_three_facs}
+# CFA
+mod.three_fac <- 'One_fac  =~ t1se_1 + t1se_2 + t1se_3 + t1se_4 + t1se_5 + t1se_6 + t1se_7 + t1se_8 
+                Two_fac  =~ t1cpl_1 + t1cpl_2 + t1cpl_3 + t1cpl_4 + t1cpl_5 + t1cpl_6
+                Three_fac  =~ t1wor_1 + t1wor_2 + t1wor_3 + t1wor_4'
+
+# Generate the Lavaan model
+fit.Three_fac<- cfa(mod.three_fac, data = factor_analysis_df, meanstructure = TRUE, std.lv = TRUE, estimator = 'MLR')
+```
+
+```{r CFA_table}
+# Pull the fit measures into a dataframe 
+cfa_fit.One_fac <- generate_cfa_fitmeasures(fit.One_fac) 
+cfa_fit.Two_fac <- generate_cfa_fitmeasures(fit.Two_fac)
+cfa_fit.Three_fac <- generate_cfa_fitmeasures(fit.Three_fac)
+
+x <- rep("", ncol(cfa_fit.One_fac))
+cfa_fit.df <- rbind(x, cfa_fit.One_fac, cfa_fit.Two_fac, cfa_fit.Three_fac) 
+cfa_fit.df
+
+Model = c("Measurement point: Time 1",
+            "One factor: CP + SE + WO",
+            "Two factors: CP + SE, WO",
+            "Three factors: CP, SE, WO")
+
+CFA_tab <- cbind(Model, cfa_fit.df) 
+CFA_tab
+```
+
+```{r display_CFA, include = T}
+library(kableExtra)
+knitr::kable(CFA_tab, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit Statistics") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+## Model comparison career planning: One vs. two factors 
+- "I have not really decided what my career objectives should be yet." (reverse): Decidedness
+- "I have a plan for my career.": Strategy
+- "I have a strategy for achieving my career goals.": Strategy
+- "I know what I need to do to reach my career goals.": Strategy
+- "My career objectives are not clear." (reverse): Decidedness
+- "I change my career objectives frequently." (reverse): Decidedness
+
+```{r CFA_cpl}
+# CFA
+mod.cpl_one_fac <- 'One_fac  =~ t1cpl_1 + t1cpl_2 + t1cpl_3 + t1cpl_4 + t1cpl_5 + t1cpl_6'
+# Generate the Lavaan model
+fit.cpl_one_fac <- cfa(mod.cpl_one_fac, data = factor_analysis_df, meanstructure = TRUE, std.lv = TRUE, estimator = 'MLR')
+# Pull the loadings into a dataframe
+cfa_loadings.cpl_one_fac <- generate_cfa_loadings(fit.cpl_one_fac, "Demos") 
+# CFA
+mod.cpl_two_fac <- 'One_fac  =~ t1cpl_1 + t1cpl_5 + t1cpl_6 
+                    Two_fac =~ t1cpl_2 + t1cpl_3 + t1cpl_4'
+# Generate the Lavaan model
+fit.cpl_two_fac <- cfa(mod.cpl_two_fac, data = factor_analysis_df, meanstructure = TRUE, std.lv = TRUE, estimator = 'MLR')
+# Pull the loadings into a dataframe
+cfa_loadings.cpl_two_fac <- generate_cfa_loadings(fit.cpl_two_fac, "Demos") 
+
+# anova
+aov_cpl = anova(fit.cpl_one_fac, fit.cpl_two_fac)
+aov_cpl[, 7][2] <- format.pval(aov_cpl[ , 7][2], eps = .001, digits = 3)
+aov_cpl[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl)[1:2] = c("One factor", "Two factors")
+kable(aov_cpl, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison career planning: One vs. two factors.') %>%
+  kable_styling(position = 'left', full_width = F) 
+
+```
+
+```{r display_CFA_cpl, include = T}
+knitr::kable(anova(fit.cpl_one_fac, fit.cpl_two_fac), escape=FALSE,format = "html", booktabs = TRUE, caption = "Model comparison - Career planning one vs. two factors") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+# Measurement Invariance  
+```{r config_invariance}
+my_dat <- my_dat[!is.na(my_dat$t1cpl_1), ]
+
+library(lavaan)
+configural_ALL <- '
+### CPLAN
+t1cpl =~ OA*t1cpl_1 +  t1cpl_2 + t1cpl_3 + t1cpl_4 + t1cpl_5 + t1cpl_6
+t2cpl =~ OA*t2cpl_1 +  t2cpl_2 + t2cpl_3 + t2cpl_4 + t2cpl_5 + t2cpl_6 
+
+# Intercepts
+t1cpl_1 ~ i2*1
+t1cpl_2 ~ 1
+t1cpl_3 ~ 1
+t1cpl_4 ~ 1
+t1cpl_5 ~ 1
+t1cpl_6 ~ 1
+
+t2cpl_1 ~ i2*1
+t2cpl_2 ~ 1
+t2cpl_3 ~ 1
+t2cpl_4 ~ 1
+t2cpl_5 ~ 1
+t2cpl_6 ~ 1
+
+# Unique Variances and Covariances
+t1cpl_1 ~~ t1cpl_1
+t1cpl_2 ~~ t1cpl_2
+t1cpl_3 ~~ t1cpl_3
+t1cpl_4 ~~ t1cpl_4
+t1cpl_5 ~~ t1cpl_5
+t1cpl_6 ~~ t1cpl_6
+
+t2cpl_1 ~~ t2cpl_1
+t2cpl_2 ~~ t2cpl_2
+t2cpl_3 ~~ t2cpl_3
+t2cpl_4 ~~ t2cpl_4
+t2cpl_5 ~~ t2cpl_5
+t2cpl_6 ~~ t2cpl_6
+
+t1cpl_1 ~~ t2cpl_1
+t1cpl_2 ~~ t2cpl_2
+t1cpl_3 ~~ t2cpl_3
+t1cpl_4 ~~ t2cpl_4
+t1cpl_5 ~~ t2cpl_5
+t1cpl_6 ~~ t2cpl_6
+
+# Latent Variable Means
+t1cpl ~ 1
+t2cpl ~ 1
+
+# Latent Variable Variances and Covariance
+t1cpl ~~ t1cpl
+t2cpl ~~ t2cpl
+t1cpl ~~ t2cpl
+
+
+### SE
+t1se =~ OB*t1se_1 + t1se_2 + t1se_3 + t1se_4 + t1se_5 + t1se_6 + t1se_7 + t1se_8
+t2se =~ OB*t2se_1 + t2se_2 + t2se_3 + t2se_4 + t2se_5 + t2se_6 + t2se_7 + t2se_8
+
+# Intercepts
+t1se_1 ~ i2*1
+t1se_2 ~ 1
+t1se_3 ~ 1
+t1se_4 ~ 1
+t1se_5 ~ 1
+t1se_6 ~ 1
+t1se_7 ~ 1
+t1se_8 ~ 1
+
+t2se_1 ~ i2*1
+t2se_2 ~ 1
+t2se_3 ~ 1
+t2se_4 ~ 1
+t2se_5 ~ 1
+t2se_6 ~ 1
+t2se_7 ~ 1
+t2se_8 ~ 1
+
+# Unique Variances and Covariances
+t1se_1 ~~ t1se_1
+t1se_2 ~~ t1se_2
+t1se_3 ~~ t1se_3
+t1se_4 ~~ t1se_4
+t1se_5 ~~ t1se_5
+t1se_6 ~~ t1se_6
+t1se_7 ~~ t1se_7
+t1se_8 ~~ t1se_8
+
+t2se_1 ~~ t2se_1
+t2se_2 ~~ t2se_2
+t2se_3 ~~ t2se_3
+t2se_4 ~~ t2se_4
+t2se_5 ~~ t2se_5
+t2se_6 ~~ t2se_6
+t2se_7 ~~ t2se_7
+t2se_8 ~~ t2se_8
+
+t1se_1 ~~ t2se_1
+t1se_2 ~~ t2se_2
+t1se_3 ~~ t2se_3
+t1se_4 ~~ t2se_4
+t1se_5 ~~ t2se_5
+t1se_6 ~~ t2se_6
+t1se_7 ~~ t2se_7
+t1se_8 ~~ t2se_8
+
+# Latent Variable Means
+t1se ~ 1
+t2se ~ 1
+
+# Latent Variable Variances and Covariance
+t1se ~~ t1se
+t2se ~~ t2se
+t1se ~~ t2se
+
+
+##WORRY
+# Define the latent factors
+
+t1wor =~ OC*t1wor_1 +  t1wor_2 + t1wor_3 + t1wor_4 
+t2wor =~ OC*t2wor_1 +  t2wor_2 + t2wor_3 + t2wor_4 
+
+# Intercepts
+t1wor_1 ~ i3*1
+t1wor_2 ~ 1
+t1wor_3 ~ 1
+t1wor_4 ~ 1
+
+t2wor_1 ~ i3*1
+t2wor_2 ~ 1
+t2wor_3 ~ 1
+t2wor_4 ~ 1
+
+# Unique Variances and Covariances
+t1wor_1 ~~ t1wor_1
+t1wor_2 ~~ t1wor_2
+t1wor_3 ~~ t1wor_3
+t1wor_4 ~~ t1wor_4
+
+t2wor_1 ~~ t2wor_1
+t2wor_2 ~~ t2wor_2
+t2wor_3 ~~ t2wor_3
+t2wor_4 ~~ t2wor_4
+
+t1wor_1 ~~ t2wor_1
+t1wor_2 ~~ t2wor_2
+t1wor_3 ~~ t2wor_3
+t1wor_4 ~~ t2wor_4
+
+# Latent Variable Means
+t1wor ~ 1
+t2wor ~ 1
+
+# Latent Variable Variances and Covariance
+t1wor ~~ t1wor
+t2wor ~~ t2wor
+t1wor ~~ t2wor
+'
+fit_configural_ALL <- lavaan::cfa(configural_ALL, data = my_dat, meanstructure = TRUE, missing="fiml")
+summary(fit_configural_ALL, fit.measures = TRUE)
+modindices(fit_configural_ALL)
+```
+
+```{r weak_invariance}
+weak_ALL <- '
+### CPLAN
+t1cpl =~ OA*t1cpl_1 +  CP2*t1cpl_2 + CP3*t1cpl_3 + CP4*t1cpl_4 + CP5*t1cpl_5 + CP6*t1cpl_6
+t2cpl =~ OA*t2cpl_1 +  CP2*t2cpl_2 + CP3*t2cpl_3 + CP4*t2cpl_4 + CP5*t2cpl_5 + CP6*t2cpl_6 
+
+# Intercepts
+t1cpl_1 ~ i2*1
+t1cpl_2 ~ 1
+t1cpl_3 ~ 1
+t1cpl_4 ~ 1
+t1cpl_5 ~ 1
+t1cpl_6 ~ 1
+
+t2cpl_1 ~ i2*1
+t2cpl_2 ~ 1
+t2cpl_3 ~ 1
+t2cpl_4 ~ 1
+t2cpl_5 ~ 1
+t2cpl_6 ~ 1
+
+# Unique Variances and Covariances
+t1cpl_1 ~~ t1cpl_1
+t1cpl_2 ~~ t1cpl_2
+t1cpl_3 ~~ t1cpl_3
+t1cpl_4 ~~ t1cpl_4
+t1cpl_5 ~~ t1cpl_5
+t1cpl_6 ~~ t1cpl_6
+
+t2cpl_1 ~~ t2cpl_1
+t2cpl_2 ~~ t2cpl_2
+t2cpl_3 ~~ t2cpl_3
+t2cpl_4 ~~ t2cpl_4
+t2cpl_5 ~~ t2cpl_5
+t2cpl_6 ~~ t2cpl_6
+
+t1cpl_1 ~~ t2cpl_1
+t1cpl_2 ~~ t2cpl_2
+t1cpl_3 ~~ t2cpl_3
+t1cpl_4 ~~ t2cpl_4
+t1cpl_5 ~~ t2cpl_5
+t1cpl_6 ~~ t2cpl_6
+
+# Latent Variable Means
+t1cpl ~ 1
+t2cpl ~ 1
+
+# Latent Variable Variances and Covariance
+t1cpl ~~ t1cpl
+t2cpl ~~ t2cpl
+t1cpl ~~ t2cpl
+
+
+### SE
+t1se =~ OB*t1se_1 + SE2*t1se_2 + SE3*t1se_3 + SE4*t1se_4 + SE5*t1se_5 + SE6*t1se_6 + SE7*t1se_7 + SE8*t1se_8
+t2se =~ OB*t2se_1 + SE2*t2se_2 + SE3*t2se_3 + SE4*t2se_4 + SE5*t2se_5 + SE6*t2se_6 + SE7*t2se_7 + SE8*t2se_8
+
+# Intercepts
+t1se_1 ~ i2*1
+t1se_2 ~ 1
+t1se_3 ~ 1
+t1se_4 ~ 1
+t1se_5 ~ 1
+t1se_6 ~ 1
+t1se_7 ~ 1
+t1se_8 ~ 1
+
+t2se_1 ~ i2*1
+t2se_2 ~ 1
+t2se_3 ~ 1
+t2se_4 ~ 1
+t2se_5 ~ 1
+t2se_6 ~ 1
+t2se_7 ~ 1
+t2se_8 ~ 1
+
+# Unique Variances and Covariances
+t1se_1 ~~ t1se_1
+t1se_2 ~~ t1se_2
+t1se_3 ~~ t1se_3
+t1se_4 ~~ t1se_4
+t1se_5 ~~ t1se_5
+t1se_6 ~~ t1se_6
+t1se_7 ~~ t1se_7
+t1se_8 ~~ t1se_8
+
+t2se_1 ~~ t2se_1
+t2se_2 ~~ t2se_2
+t2se_3 ~~ t2se_3
+t2se_4 ~~ t2se_4
+t2se_5 ~~ t2se_5
+t2se_6 ~~ t2se_6
+t2se_7 ~~ t2se_7
+t2se_8 ~~ t2se_8
+
+t1se_1 ~~ t2se_1
+t1se_2 ~~ t2se_2
+t1se_3 ~~ t2se_3
+t1se_4 ~~ t2se_4
+t1se_5 ~~ t2se_5
+t1se_6 ~~ t2se_6
+t1se_7 ~~ t2se_7
+t1se_8 ~~ t2se_8
+
+# Latent Variable Means
+t1se ~ 1
+t2se ~ 1
+
+# Latent Variable Variances and Covariance
+t1se ~~ t1se
+t2se ~~ t2se
+t1se ~~ t2se
+
+
+##WORRY
+# Define the latent factors
+
+t1wor =~ OC*t1wor_1 +  WO2*t1wor_2 + WO3*t1wor_3 + WO4*t1wor_4 
+t2wor =~ OC*t2wor_1 +  WO2*t2wor_2 + WO3*t2wor_3 + WO4*t2wor_4 
+
+# Intercepts
+t1wor_1 ~ i3*1
+t1wor_2 ~ 1
+t1wor_3 ~ 1
+t1wor_4 ~ 1
+
+t2wor_1 ~ i3*1
+t2wor_2 ~ 1
+t2wor_3 ~ 1
+t2wor_4 ~ 1
+
+# Unique Variances and Covariances
+t1wor_1 ~~ t1wor_1
+t1wor_2 ~~ t1wor_2
+t1wor_3 ~~ t1wor_3
+t1wor_4 ~~ t1wor_4
+
+t2wor_1 ~~ t2wor_1
+t2wor_2 ~~ t2wor_2
+t2wor_3 ~~ t2wor_3
+t2wor_4 ~~ t2wor_4
+
+t1wor_1 ~~ t2wor_1
+t1wor_2 ~~ t2wor_2
+t1wor_3 ~~ t2wor_3
+t1wor_4 ~~ t2wor_4
+
+# Latent Variable Means
+t1wor ~ 1
+t2wor ~ 1
+
+# Latent Variable Variances and Covariance
+t1wor ~~ t1wor
+t2wor ~~ t2wor
+t1wor ~~ t2wor
+'
+
+fit_weak_ALL <- lavaan::cfa(weak_ALL, data = my_dat, missing="fiml")
+summary(fit_weak_ALL, fit.measures = TRUE)
+```
+
+```{r strong_invariance}
+strong_ALL <- '
+### CPLAN
+t1cpl =~ OA*t1cpl_1 +  CP2*t1cpl_2 + CP3*t1cpl_3 + CP4*t1cpl_4 + CP5*t1cpl_5 + CP6*t1cpl_6
+t2cpl =~ OA*t2cpl_1 +  CP2*t2cpl_2 + CP3*t2cpl_3 + CP4*t2cpl_4 + CP5*t2cpl_5 + CP6*t2cpl_6 
+
+# Intercepts
+t1cpl_1 ~ i2*1
+t1cpl_2 ~ ICP2*1
+t1cpl_3 ~ ICP3*1
+t1cpl_4 ~ ICP4*1
+t1cpl_5 ~ ICP5*1
+t1cpl_6 ~ ICP6*1
+
+t2cpl_1 ~ i2*1
+t2cpl_2 ~ ICP2*1
+t2cpl_3 ~ ICP3*1
+t2cpl_4 ~ ICP4*1
+t2cpl_5 ~ ICP5*1
+t2cpl_6 ~ ICP6*1
+
+# Unique Variances and Covariances
+t1cpl_1 ~~ t1cpl_1
+t1cpl_2 ~~ t1cpl_2
+t1cpl_3 ~~ t1cpl_3
+t1cpl_4 ~~ t1cpl_4
+t1cpl_5 ~~ t1cpl_5
+t1cpl_6 ~~ t1cpl_6
+
+t2cpl_1 ~~ t2cpl_1
+t2cpl_2 ~~ t2cpl_2
+t2cpl_3 ~~ t2cpl_3
+t2cpl_4 ~~ t2cpl_4
+t2cpl_5 ~~ t2cpl_5
+t2cpl_6 ~~ t2cpl_6
+
+t1cpl_1 ~~ t2cpl_1
+t1cpl_2 ~~ t2cpl_2
+t1cpl_3 ~~ t2cpl_3
+t1cpl_4 ~~ t2cpl_4
+t1cpl_5 ~~ t2cpl_5
+t1cpl_6 ~~ t2cpl_6
+
+# Latent Variable Means
+t1cpl ~ 1
+t2cpl ~ 1
+
+# Latent Variable Variances and Covariance
+t1cpl ~~ t1cpl
+t2cpl ~~ t2cpl
+t1cpl ~~ t2cpl
+
+
+### SE
+t1se =~ OB*t1se_1 + SE2*t1se_2 + SE3*t1se_3 + SE4*t1se_4 + SE5*t1se_5 + SE6*t1se_6 + SE7*t1se_7 + SE8*t1se_8
+t2se =~ OB*t2se_1 + SE2*t2se_2 + SE3*t2se_3 + SE4*t2se_4 + SE5*t2se_5 + SE6*t2se_6 + SE7*t2se_7 + SE8*t2se_8
+
+# Intercepts
+t1se_1 ~ i2*1
+t1se_2 ~ ISE2*1
+t1se_3 ~ ISE3*1
+t1se_4 ~ ISE4*1
+t1se_5 ~ ISE5*1
+t1se_6 ~ ISE6*1
+t1se_7 ~ ISE7*1
+t1se_8 ~ ISE8*1
+
+t2se_1 ~ i2*1
+t2se_2 ~ ISE2*1
+t2se_3 ~ ISE3*1
+t2se_4 ~ ISE4*1
+t2se_5 ~ ISE5*1
+t2se_6 ~ ISE6*1
+t2se_7 ~ ISE7*1
+t2se_8 ~ ISE8*1
+
+# Unique Variances and Covariances
+t1se_1 ~~ t1se_1
+t1se_2 ~~ t1se_2
+t1se_3 ~~ t1se_3
+t1se_4 ~~ t1se_4
+t1se_5 ~~ t1se_5
+t1se_6 ~~ t1se_6
+t1se_7 ~~ t1se_7
+t1se_8 ~~ t1se_8
+
+t2se_1 ~~ t2se_1
+t2se_2 ~~ t2se_2
+t2se_3 ~~ t2se_3
+t2se_4 ~~ t2se_4
+t2se_5 ~~ t2se_5
+t2se_6 ~~ t2se_6
+t2se_7 ~~ t2se_7
+t2se_8 ~~ t2se_8
+
+t1se_1 ~~ t2se_1
+t1se_2 ~~ t2se_2
+t1se_3 ~~ t2se_3
+t1se_4 ~~ t2se_4
+t1se_5 ~~ t2se_5
+t1se_6 ~~ t2se_6
+t1se_7 ~~ t2se_7
+t1se_8 ~~ t2se_8
+
+# Latent Variable Means
+t1se ~ 1
+t2se ~ 1
+
+# Latent Variable Variances and Covariance
+t1se ~~ t1se
+t2se ~~ t2se
+t1se ~~ t2se
+
+
+##WORRY
+# Define the latent factors
+
+t1wor =~ OC*t1wor_1 +  WO2*t1wor_2 + WO3*t1wor_3 + WO4*t1wor_4 
+t2wor =~ OC*t2wor_1 +  WO2*t2wor_2 + WO3*t2wor_3 + WO4*t2wor_4 
+
+# Intercepts
+t1wor_1 ~ i3*1
+t1wor_2 ~ IWO2*1
+t1wor_3 ~ IWO3*1
+t1wor_4 ~ IWO4*1
+
+t2wor_1 ~ i3*1
+t2wor_2 ~ IWO2*1
+t2wor_3 ~ IWO3*1
+t2wor_4 ~ IWO4*1
+
+# Unique Variances and Covariances
+t1wor_1 ~~ t1wor_1
+t1wor_2 ~~ t1wor_2
+t1wor_3 ~~ t1wor_3
+t1wor_4 ~~ t1wor_4
+
+t2wor_1 ~~ t2wor_1
+t2wor_2 ~~ t2wor_2
+t2wor_3 ~~ t2wor_3
+t2wor_4 ~~ t2wor_4
+
+t1wor_1 ~~ t2wor_1
+t1wor_2 ~~ t2wor_2
+t1wor_3 ~~ t2wor_3
+t1wor_4 ~~ t2wor_4
+
+# Latent Variable Means
+t1wor ~ 1
+t2wor ~ 1
+
+# Latent Variable Variances and Covariance
+t1wor ~~ t1wor
+t2wor ~~ t2wor
+t1wor ~~ t2wor
+'
+
+fit_strong_ALL <- lavaan::cfa(strong_ALL, data = my_dat, missing="fiml")
+summary(fit_strong_ALL, fit.measures = TRUE)
+```
+
+```{r measurement_invariance}
+# Pull the fit measures into a dataframe 
+cfa_fit.config <- generate_cfa_fitmeasures(fit_configural_ALL) 
+cfa_fit.weak <- generate_cfa_fitmeasures(fit_weak_ALL)
+cfa_fit.strong <- generate_cfa_fitmeasures(fit_strong_ALL)
+
+#x <- rep("", ncol(cfa_fit.One_fac))
+cfa_fit_mi.df <- rbind(cfa_fit.config, cfa_fit.weak, cfa_fit.strong) 
+cfa_fit_mi.df
+
+Model = c("Configural model",
+          "Weak factorial invariance",
+          "Strong factorial invariance")
+
+MI_tab <- cbind(Model, cfa_fit_mi.df) 
+MI_tab
+
+Chisq_diff <- c(as.numeric(MI_tab[[2]][[3]])-as.numeric(MI_tab[[2]][[2]]), as.numeric(MI_tab[[2]][[2]])-as.numeric(MI_tab[[2]][[1]])) %>% round(.,3)
+df_diff <- c(as.numeric(MI_tab[[3]][[3]])-as.numeric(MI_tab[[3]][[2]]), as.numeric(MI_tab[[3]][[2]])-as.numeric(MI_tab[[3]][[1]])) %>% round(.,3)
+CFI_diff <- c(as.numeric(MI_tab[[5]][[3]])-as.numeric(MI_tab[[5]][[2]]), as.numeric(MI_tab[[5]][[2]])-as.numeric(MI_tab[[5]][[1]])) %>% round(.,3)
+TLI_diff <- c(as.numeric(MI_tab[[6]][[3]])-as.numeric(MI_tab[[6]][[2]]), as.numeric(MI_tab[[6]][[2]])-as.numeric(MI_tab[[6]][[1]])) %>% round(.,3)
+RMSEA_diff <- c(as.numeric(MI_tab[[9]][[3]])-as.numeric(MI_tab[[9]][[2]]), as.numeric(MI_tab[[9]][[2]])-as.numeric(MI_tab[[9]][[1]])) %>% round(.,3)
+RMSEA_diff[1] <- format.pval(RMSEA_diff[1], eps = .001, digits = 3)
+RMSEA_diff[2] <- format.pval(RMSEA_diff[2], eps = .001, digits = 3)
+SRMR_diff <- c(as.numeric(MI_tab[[11]][[3]])-as.numeric(MI_tab[[11]][[2]]), as.numeric(MI_tab[[11]][[2]])-as.numeric(MI_tab[[11]][[1]])) %>% round(.,3)
+SRMR_diff[1] <- format.pval(SRMR_diff[1], eps = .001, digits = 3)
+
+Compar_table <- data.frame(cbind(Chisq_diff, df_diff, CFI_diff, TLI_diff, RMSEA_diff, SRMR_diff))
+Compar_table
+
+x <- rep("-", ncol(Compar_table))
+MI_tab_comp <- rbind(x, Compar_table) 
+MI_tab_comp <- cbind(Model, MI_tab_comp)
+names(MI_tab_comp) <- c("Model", "&#916 Chisq", "&#916 df", "&#916 CFI", "&#916 TLI", "&#916 RMSEA", "&#916 SRMR")
+```
+
+```{r display_mi_and_mi_comparison, include = T}
+library(kableExtra)
+
+knitr::kable(MI_tab, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Measurement Invariance: Model fit statistics") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(MI_tab_comp, booktabs = TRUE, format = 'html', escape = FALSE, caption = "Measurement Invariance: Model comparison") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+```
+
+# Univariate LCSM 
+![Example Plot: Univariate Latent Change Score Model: Worry.](Example_ULCSM.png)
+
+## Univariate Latent Change Score Model Career Planning 
+```{r lcsm_cplan}
+no_na <- my_dat %>% 
+  filter_at(vars(matches("t1se_|t1wor|t1cpl|t2se_|t2wor|t2cpl")), all_vars(!is.na(.)))
+
+library(lavaan)
+ULCS_Cplan<-'
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6                                 # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3
+          +equal("Cplan_T1=~t1cpl_4")*t2cpl_4+equal("Cplan_T1=~t1cpl_5")*t2cpl_5
+          +equal("Cplan_T1=~t1cpl_6")*t2cpl_6                                               # This specifies the measurement model  with the equality constrained factor loadings
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1~Cplan_T1        # This estimates the self-feedback parameter
+
+
+Cplan_T2 ~ 0*1            # This line constrains the intercept of Cplan_T2 to 0
+Cplan_T2 ~~ 0*Cplan_T2    # This fixes the variance of the Cplan_T2 to 0 
+
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1             # This estimates the intercept of Cplan_T1 
+dCplan_T1 ~~  dCplan_T1   # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+'
+
+fitULCS_Cplan <- lavaan(ULCS_Cplan, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+summary(fitULCS_Cplan, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+parameterEstimates(fitULCS_Cplan)
+paras_ULCS_Cplan <- parameterEstimates(fitULCS_Cplan)[c(15, 18, 19, 20, 21), ]
+for (i in seq_along(paras_ULCS_Cplan)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_ULCS_Cplan$label <- NULL
+paras_ULCS_Cplan
+rownames(paras_ULCS_Cplan) <- NULL
+
+
+fitULCS_Cplan_meas <- generate_cfa_fitmeasures(fitULCS_Cplan)
+for (i in seq_along(fitULCS_Cplan_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+
+```
+
+
+```{r display_lcsm_cpl, message = F, include = T}
+library(kableExtra)
+knitr::kable(fitULCS_Cplan_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a univariate latent change score model for career planning") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_ULCS_Cplan, booktabs = TRUE, format = 'html', escape = FALSE, caption = "Parameter estimates of a univariate latent change score model for career planning") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+
+```{r display_ULCS_Cplan_path, message = F}
+library(semPlot)
+semPaths(fitULCS_Cplan, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, sizeMan = 4, sizeLat = 10, nCharNodes = 0, edge.label.cex = 1.2, fixedStyle = c("grey",3), curvePivot = TRUE)
+```
+
+```{r lcsm_cplan_fixed}
+library(lavaan)
+ULCS_Cplan_fixed<-'
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6                                 # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3
+          +equal("Cplan_T1=~t1cpl_4")*t2cpl_4+equal("Cplan_T1=~t1cpl_5")*t2cpl_5
+          +equal("Cplan_T1=~t1cpl_6")*t2cpl_6                                               # This specifies the measurement model  with the equality constrained factor loadings
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1~Cplan_T1        # This estimates the self-feedback parameter
+
+
+Cplan_T2 ~ 0*1            # This line constrains the intercept of Cplan_T2 to 0
+Cplan_T2 ~~ 0*Cplan_T2    # This fixes the variance of the Cplan_T2 to 0 
+
+dCplan_T1 ~ 0*1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1             # This estimates the intercept of Cplan_T1 
+dCplan_T1 ~~  dCplan_T1   # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+'
+
+fitULCS_Cplan_fixed <- lavaan(ULCS_Cplan_fixed, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+summary(fitULCS_Cplan_fixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+parameterEstimates(fitULCS_Cplan_fixed)
+
+# anova
+aov_cpl_free_fixed = anova(fitULCS_Cplan, fitULCS_Cplan_fixed)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][2]
+aov_cpl_free_fixed[, 7][2] <- format.pval(aov_cpl_free_fixed[ , 7][2], eps = .001, digits = 3)
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl)[1:2] = c("Free mean change", "Mean change fixed to zero")
+```
+
+
+```{r display_comp_cpl_mean, include = T}
+kable(aov_cpl, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison career planning: Free mean change vs. mean change fixed to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+## Univariate Latent Change Score Model Self-efficacy
+```{r lcsm_se}
+library(lavaan)
+ULCS_SE<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8                                 # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
+          +equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5
+          +equal("SE_T1=~t1se_6")*t2se_7+equal("SE_T1=~t1se_7")*t2se_6 +equal("SE_T1=~t1se_8")*t2se_8                                          # This specifies the measurement model  with the equality constrained factor loadings
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1~SE_T1        # This estimates the self-feedback parameter
+
+
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+SE_T2 ~~ 0*SE_T2    # This fixes the variance of the SE_T2 to 0 
+
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7 
+t1se_8~~t2se_8 
+
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+
+t1se_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+'
+
+fitULCS_SE <- lavaan(ULCS_SE, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+summary(fitULCS_SE, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+parameterEstimates(fitULCS_SE)
+paras_ULCS_SE <- parameterEstimates(fitULCS_SE)[c(19,22,23,24,25), ]
+for (i in seq_along(paras_ULCS_SE)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_ULCS_SE$label <- NULL
+paras_ULCS_SE
+rownames(paras_ULCS_SE) <- NULL
+fitULCS_SE_meas <- generate_cfa_fitmeasures(fitULCS_SE)
+for (i in seq_along(fitULCS_SE_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+
+```
+
+
+```{r display_lcsm_se, include = T}
+library(kableExtra)
+knitr::kable(fitULCS_SE_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a univariate latent change score model for self-efficacy") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_ULCS_SE, booktabs = TRUE, format = 'html', escape = FALSE, caption = "Parameter estimates of a univariate latent change score model for self-efficacy") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+
+```{r display_fitULCS_SE_path}
+semPaths(fitULCS_SE, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, sizeMan = 4, sizeLat = 9, nCharNodes = 0, edge.label.cex = 0.6, fixedStyle = c("grey",3), curvePivot = TRUE)
+```
+
+```{r lcsm_se_fixed}
+library(lavaan)
+ULCS_SE_fixed<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8                                 # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
+          +equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5
+          +equal("SE_T1=~t1se_6")*t2se_7+equal("SE_T1=~t1se_7")*t2se_6 +equal("SE_T1=~t1se_8")*t2se_8                                          # This specifies the measurement model  with the equality constrained factor loadings
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1~SE_T1        # This estimates the self-feedback parameter
+
+
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+SE_T2 ~~ 0*SE_T2    # This fixes the variance of the SE_T2 to 0 
+
+dSE_T1 ~ 0*1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7 
+t1se_8~~t2se_8 
+
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+
+t1se_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+'
+
+fitULCS_SE_fixed <- lavaan(ULCS_SE_fixed, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+
+# anova
+aov_cpl_free_fixed = anova(fitULCS_SE, fitULCS_SE_fixed)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][2]
+aov_cpl_free_fixed[, 7][2] <- format.pval(aov_cpl_free_fixed[ , 7][2], eps = .001, digits = 3)
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl)[1:2] = c("Free mean change", "Mean change fixed to zero")
+
+```
+
+
+```{r display_comp_se_mean, include = T}
+kable(aov_cpl, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison self-efficacy: Free mean change vs. mean change fixed to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+
+```
+
+## Univariate Latent Change Score Model Worry 
+```{r lcsm_worry}
+library(lavaan)
+ULCS_WOR<-'
+WOR_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4                              # This specifies the measurement model for WOR_T1 
+WOR_T2=~1*t2wor_1+equal("WOR_T1=~t1wor_2")*t2wor_2+equal("WOR_T1=~t1wor_3")*t2wor_3
+          +equal("WOR_T1=~t1wor_4")*t2wor_4                                       # This specifies the measurement model  with the equality constrained factor loadings
+
+WOR_T2 ~ 1*WOR_T1     # Fixed regression of WOR_T2 on WOR_T1
+
+dWOR_T1 =~ 1*WOR_T2   # Fixed regression of dWOR_T1 on WOR_T2
+dWOR_T1~WOR_T1        # This estimates the self-feedback parameter
+
+
+WOR_T2 ~ 0*1            # This line constrains the intercept of WOR_T2 to 0
+WOR_T2 ~~ 0*WOR_T2    # This fixes the variance of the WOR_T2 to 0 
+
+dWOR_T1 ~ 1             # This estimates the intercept of the change score 
+WOR_T1 ~  1             # This estimates the intercept of WOR_T1 
+dWOR_T1 ~~  dWOR_T1   # This estimates the variance of the change scores 
+WOR_T1 ~~   WOR_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2   
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T2
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+ 
+t2wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+'
+
+fitULCS_WOR <- lavaan(ULCS_WOR, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+summary(fitULCS_WOR, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+parameterEstimates(fitULCS_WOR)
+paras_ULCS_WOR <- parameterEstimates(fitULCS_WOR)[c(11,14:17), ]
+for (i in seq_along(paras_ULCS_WOR)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_ULCS_WOR$label <- NULL
+paras_ULCS_WOR
+rownames(paras_ULCS_WOR) <- NULL
+fitULCS_wor_meas <- generate_cfa_fitmeasures(fitULCS_WOR)
+for (i in seq_along(fitULCS_wor_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+```
+
+```{r display_lcsm_worry, include = T}
+library(kableExtra)
+knitr::kable(fitULCS_wor_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a univariate latent change score model for worry") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_ULCS_WOR, booktabs = TRUE, format = 'html', escape = FALSE, caption = "Parameter estimates of a univariate latent change score model for worry") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+```{r display_ULCS_WOR_path}
+semPaths(fitULCS_WOR, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, sizeMan = 4, sizeLat = 9, nCharNodes = 0, edge.label.cex = 0.6, fixedStyle = c("grey",3), curvePivot = TRUE)
+```
+
+```{r lcsm_worry_fixed}
+library(lavaan)
+ULCS_wor_fixed<-'
+WOR_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4                                # This specifies the measurement model for WOR_T1 
+WOR_T2=~1*t2wor_1+equal("WOR_T1=~t1wor_2")*t2wor_2+equal("WOR_T1=~t1wor_3")*t2wor_3
+          +equal("WOR_T1=~t1wor_4")*t2wor_4                                       # This specifies the measurement model  with the equality constrained factor loadings
+
+WOR_T2 ~ 1*WOR_T1     # Fixed regression of WOR_T2 on WOR_T1
+
+dWOR_T1 =~ 1*WOR_T2   # Fixed regression of dWOR_T1 on WOR_T2
+dWOR_T1~WOR_T1        # This estimates the self-feedback parameter
+
+
+WOR_T2 ~ 0*1            # This line constrains the intercept of WOR_T2 to 0
+WOR_T2 ~~ 0*WOR_T2    # This fixes the variance of the WOR_T2 to 0 
+
+dWOR_T1 ~ 0*1             # This estimates the intercept of the change score 
+WOR_T1 ~  1             # This estimates the intercept of WOR_T1 
+dWOR_T1 ~~  dWOR_T1   # This estimates the variance of the change scores 
+WOR_T1 ~~   WOR_T1    # This estimates the variance of the Cplan_T1 
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2   
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T2
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1     # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+'
+
+fitULCS_wor_fixed <- lavaan(ULCS_wor_fixed, data =my_dat, estimator = 'mlr', fixed.x = FALSE,missing = 'fiml')
+
+# anova
+aov_cpl_free_fixed = anova(fitULCS_WOR, fitULCS_wor_fixed)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][2]
+aov_cpl_free_fixed[, 7][2] <- format.pval(aov_cpl_free_fixed[ , 7][2], eps = .001, digits = 3)
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl)[1:2] = c("Free mean change", "Mean change fixed to zero")
+
+```
+
+```{r display_comp_wor_mean, include = T}
+kable(aov_cpl, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison worry: Free mean change vs. mean change fixed to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+# Bivariate LCSM 
+
+![Example Plot: Bivariate Latent Change Score Model Worry.](EX_BLCSM.png)
+
+## BLCSM: Career Planning - Worry 
+
+```{r blcs_cplan_worry}
+library(lavaan)
+library(glue)
+BLCS_Cplan_worry<-'
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6  # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3
++equal("Cplan_T1=~t1cpl_4")*t2cpl_4+equal("Cplan_T1=~t1cpl_5")*t2cpl_5
++equal("Cplan_T1=~t1cpl_6")*t2cpl_6
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1             # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1            # This line constrains the intercept of Cplan_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dCplan_T1 ~~  dCplan_T1   # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2  # This estimates the variance of the Cplan_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+Cplan_T1
+dCplan_T1~Worry_T1+Cplan_T1
+
+Cplan_T1 ~~ Worry_T1
+dCplan_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_Cplan_worry <- lavaan(BLCS_Cplan_worry, data=raw_data_Grad2, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_Cplan_worry, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_Cplan_worry)
+paras_BLCS_Cplan_worry<- parameterEstimates(fit_BLCS_Cplan_worry)[c(87,90,88,89), ]
+paras_BLCS_Cplan_worry$label <- NULL
+paras_BLCS_Cplan_worry[4] <- round(paras_BLCS_Cplan_worry[4],3)
+paras_BLCS_Cplan_worry[8] <- round(paras_BLCS_Cplan_worry[8],3)
+paras_BLCS_Cplan_worry[9] <- round(paras_BLCS_Cplan_worry[9],3)
+rownames(paras_BLCS_Cplan_worry) <- NULL
+paras_BLCS_Cplan_worry[,7 ] <- format.pval(paras_BLCS_Cplan_worry[ , 7], eps = .001, digits = 3)
+paras_BLCS_Cplan_worry <- paras_BLCS_Cplan_worry %>% mutate(Est = glue("{est} 95%CI({ci.lower}, {ci.upper})"))
+fit_BLCS_Cplan_worry_meas <- generate_cfa_fitmeasures(fit_BLCS_Cplan_worry)
+for (i in seq_along(fit_BLCS_Cplan_worry_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_BLCS_Cplan_worry <- paras_BLCS_Cplan_worry[, c(1:3, 10, 7)]
+names(paras_BLCS_Cplan_worry) <- c("", "", "", "Est", "p")
+paras_BLCS_Cplan_worry
+```
+
+
+```{r display_blcs_cplan_worry, include = T}
+library(kableExtra)
+knitr::kable(fit_BLCS_Cplan_worry_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a bivariate latent change score model for career planning and worry") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_BLCS_Cplan_worry, booktabs = TRUE, digits = 3, format = 'html', escape = FALSE, caption = "Parameter estimates of a bivariate latent change score model for career planning and worry") %>%
+  kable_styling(position = 'left', full_width = F) %>%
+  pack_rows("Self-feedback", 1, 2) %>%
+  pack_rows("Coupling effect", 3, 4) %>%
+  row_spec(c(3,4), bold = T, color = "white", background = "#D7261E")
+```
+
+
+```{r display_BLCS_Cplan_worry_path}
+semPaths(fit_BLCS_Cplan_worry, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, structural = TRUE, sizeMan = 4, sizeLat = 12, nCharNodes = 0, node.label.cex = 1.6, edge.label.cex = 1.3, fixedStyle = c("grey",3), curvePivot = TRUE, fade = FALSE,  label.prop = 1.5)
+```
+
+```{r blcs_cplan_worryfixed}
+BLCS_Cplan_byworryfix<-'
+Cplan_t1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6            # this specifies the measurement model for Cplan_t1 
+Cplan_t2=~1*t2cpl_1+equal("Cplan_t1=~t1cpl_2")*t2cpl_2+equal("Cplan_t1=~t1cpl_3")*t2cpl_3
++equal("Cplan_t1=~t1cpl_4")*t2cpl_4+equal("Cplan_t1=~t1cpl_5")*t2cpl_5
++equal("Cplan_t1=~t1cpl_6")*t2cpl_6
+
+t1cpl_1~~t2cpl_1   # this allows residual covariance on indicator 1 across t1 and t2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # this allows residual variance on indicator 1 at t1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # this allows residual variance on indicator 1 at t2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1   # this constrains the intercept of ind 1 to 0 at t1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # this constrains the intercept of ind 1 to 0 at t2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+Worry_t1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4           # this specifies the measurement model for WORRY 
+Worry_t2=~1*t2wor_1+equal("Worry_t1=~t1wor_2")*t2wor_2+equal("Worry_t1=~t1wor_3")*t2wor_3+equal("Worry_t2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # this allows residual covariance on indicator 1 across t1 and t2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # this allows residual variance on indicator 1 at t1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # this allows residual variance on indicator 1 at t1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # this constrains the intercept of ind 1 to 0 at t1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # this constrains the intercept of ind 1 to 0 at t2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_t2 ~ 1*Cplan_t1     # Fixed regression of Cplan_t2 on Cplan_t1
+dCplan_t1 =~ 1*Cplan_t2     # Fixed regression of dCplan_t1 on Cplan_t2
+dCplan_t1 ~ 1             # this estimates the intercept of the change score 
+Cplan_t1 ~  1           # this estimates the intercept of Cplan_t1 
+Cplan_t2 ~ 0*1          # this line constrains the intercept of Cplan_t2 to 0
+
+
+Worry_t2 ~ 1*Worry_t1     # Fixed regression of Worry_t2 on Worry_t1
+dWorry_t1 =~ 1*Worry_t2     # Fixed regression of dWorry_t1 on Worry_t2
+Worry_t2 ~ 0*1    
+Worry_t2 ~~ 0*Worry_t2
+
+
+dCplan_t1 ~~  dCplan_t1       # this estimates the variance of the change scores 
+Cplan_t1 ~~   Cplan_t1    # this estimates the variance of the Cplan_t1 
+Cplan_t2 ~~   0*Cplan_t2    # this estimates the variance of the Cplan_t1 
+
+dWorry_t1 ~ 1 
+Worry_t1 ~ 1
+dWorry_t1 ~~ dWorry_t1
+Worry_t1 ~~ Worry_t1
+
+
+#dCplan_t1~Cplan_t1+Worry_t1 # this estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dWorry_t1~Worry_t1+Cplan_t1
+dCplan_t1~0*Worry_t1+Cplan_t1
+
+Cplan_t1 ~~ Worry_t1
+dCplan_t1 ~~ dWorry_t1
+'
+fitBLCS_Cplan_byworryfix <- lavaan(BLCS_Cplan_byworryfix, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fitBLCS_Cplan_byworryfix, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+
+fitBLCS_Cplan_byworryfix_meas <- generate_cfa_fitmeasures(fitBLCS_Cplan_byworryfix)
+for (i in seq_along(fitBLCS_Cplan_byworryfix_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+
+parameterEstimates(fitBLCS_Cplan_byworryfix)
+paras_BLCS_Cplan_byworryfix<- parameterEstimates(fitBLCS_Cplan_byworryfix)[c(87,90,88,89), ]
+
+paras_BLCS_Cplan_byworryfix$label <- NULL
+paras_BLCS_Cplan_byworryfix
+rownames(paras_BLCS_Cplan_byworryfix) <- NULL
+
+```
+
+```{r comp_cplan_worryfixed, include = T}
+free_fixed_cplan_worry <- rbind(fit_BLCS_Cplan_worry_meas, fitBLCS_Cplan_byworryfix_meas)
+free_fixed_cplan_worry
+
+# anova
+aov_cpl_free_fixed = anova(fitBLCS_Cplan_byworryfix, fit_BLCS_Cplan_worry)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][2]
+aov_cpl_free_fixed[, 7][2] <- format.pval(aov_cpl_free_fixed[ , 7][2], eps = .001, digits = 3)
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of worry constrained to zero")
+```
+
+
+```{r display_comp_cplan_worryfixed, include = T}
+kable(aov_cpl_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison BLCSM Career planning - worry: Coupling effect of worry free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+```{r blcs_worry_cplfixed}
+BLCS_worry_bycplfixed<-'
+Cplan_t1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6            # this specifies the measurement model for Cplan_t1 
+Cplan_t2=~1*t2cpl_1+equal("Cplan_t1=~t1cpl_2")*t2cpl_2+equal("Cplan_t1=~t1cpl_3")*t2cpl_3
++equal("Cplan_t1=~t1cpl_4")*t2cpl_4+equal("Cplan_t1=~t1cpl_5")*t2cpl_5
++equal("Cplan_t1=~t1cpl_6")*t2cpl_6
+
+t1cpl_1~~t2cpl_1   # this allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+Worry_t1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4           # this specifies the measurement model for WORRY 
+Worry_t2=~1*t2wor_1+equal("Worry_t1=~t1wor_2")*t2wor_2+equal("Worry_t1=~t1wor_3")*t2wor_3+equal("Worry_t2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # this allows residual covariance on indicator 1 across t1 and t2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # this allows residual variance on indicator 1 at t1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # this allows residual variance on indicator 1 at t1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # this constrains the intercept of ind 1 to 0 at t1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # this constrains the intercept of ind 1 to 0 at t2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_t2 ~ 1*Cplan_t1     # Fixed regression of Cplan_t2 on Cplan_t1
+dCplan_t1 =~ 1*Cplan_t2     # Fixed regression of dCplan_t1 on Cplan_t2
+dCplan_t1 ~ 1             # this estimates the intercept of the change score 
+Cplan_t1 ~  1           # this estimates the intercept of Cplan_t1 
+Cplan_t2 ~ 0*1          # this line constrains the intercept of Cplan_t2 to 0
+
+
+Worry_t2 ~ 1*Worry_t1     # Fixed regression of Worry_t2 on Worry_t1
+dWorry_t1 =~ 1*Worry_t2     # Fixed regression of dWorry_t1 on Worry_t2
+Worry_t2 ~ 0*1    
+Worry_t2 ~~ 0*Worry_t2
+
+
+dCplan_t1 ~~  dCplan_t1       # this estimates the variance of the change scores 
+Cplan_t1 ~~   Cplan_t1    # this estimates the variance of the Cplan_t1 
+Cplan_t2 ~~   0*Cplan_t2    # this estimates the variance of the Cplan_t1 
+
+dWorry_t1 ~ 1 
+Worry_t1 ~ 1
+dWorry_t1 ~~ dWorry_t1
+Worry_t1 ~~ Worry_t1
+
+
+#dCplan_t1~Cplan_t1+Worry_t1 # this estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dWorry_t1~Worry_t1+0*Cplan_t1
+dCplan_t1~Worry_t1+Cplan_t1
+
+Cplan_t1 ~~ Worry_t1
+dCplan_t1 ~~ dWorry_t1
+
+'
+fitBLCS_worry_bycplfixed <- lavaan(BLCS_worry_bycplfixed, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fitBLCS_worry_bycplfixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+```{r comp_worry_cplfixed, include= T}
+# anova
+aov_cpl_free_fixed = anova(fitBLCS_worry_bycplfixed, fit_BLCS_Cplan_worry)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][2]
+aov_cpl_free_fixed[, 7][2] <- format.pval(aov_cpl_free_fixed[ , 7][2], eps = .001, digits = 3)
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of career planning constrained to zero")
+
+```
+
+
+```{r display_comp_worry_cplfixed, include = T}
+kable(aov_cpl_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison BLCSM Career planning - worry: Coupling effect of career planning free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+### BLCSM Subscales Career Planning - Worry
+
+```{r worry_cplan_1_5_6}
+BLCS_Cplan_worry_1<-'
+Cplan_T1=~1*t1cpl_1+t1cpl_5+t1cpl_6  # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_5")*t2cpl_5+equal("Cplan_T1=~t1cpl_6")*t2cpl_6
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4           # This specifies the measurement model for WORRY 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2     # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1           # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1          # This line constrains the intercept of Cplan_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2     # Fixed regression of dWorry_T1 on Worry_T2
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+Worry_T2 ~ 0*1    
+
+Worry_T2 ~~ 0*Worry_T2
+Cplan_T2 ~~   0*Cplan_T2    # This fixes the variance of the Cplan_T2
+
+dCplan_T1 ~~  dCplan_T1       # This estimates the variance of the change scores 
+dWorry_T1 ~~ dWorry_T1
+
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Worry_T1 ~~ Worry_T1
+
+
+#This estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dWorry_T1~Worry_T1+Cplan_T1
+dCplan_T1~0*Worry_T1+Cplan_T1
+
+Cplan_T1 ~~ Worry_T1
+dCplan_T1 ~~ dWorry_T1
+
+'
+fit_BLCS_Cplan_worry_1 <- lavaan(BLCS_Cplan_worry_1, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_Cplan_worry_1, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_Cplan_worry_1)
+paras_BLCS_Cplan_byworryfix_1<- parameterEstimates(fit_BLCS_Cplan_worry_1)[c(66,69,67,68), ]
+
+paras_BLCS_Cplan_byworryfix_1$label <- NULL
+paras_BLCS_Cplan_byworryfix_1
+rownames(paras_BLCS_Cplan_byworryfix_1) <- NULL
+```
+
+```{r worry_cplan_2_3_4}
+BLCS_Cplan_worry_2<-'
+Cplan_T1=~1*t1cpl_2+t1cpl_3+t1cpl_4  # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T1=~t1cpl_4")*t2cpl_4
+
+t1cpl_2~~t2cpl_2   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4 
+
+t1cpl_2~~t1cpl_2   # This allows residual variance on indicator 1 at T1
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+
+t2cpl_2~~t2cpl_2   # This allows residual variance on indicator 1 at T2
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+
+t1cpl_2~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_3~1 
+t1cpl_4~1 
+
+
+t2cpl_2~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4           # This specifies the measurement model for WORRY 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2     # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1           # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1          # This line constrains the intercept of Cplan_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2     # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dCplan_T1 ~~  dCplan_T1       # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2    # This estimates the variance of the Cplan_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+#This estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dWorry_T1~Worry_T1+Cplan_T1
+dCplan_T1~0*Worry_T1+Cplan_T1
+
+Cplan_T1 ~~ Worry_T1
+dCplan_T1 ~~ dWorry_T1
+
+'
+
+fit_BLCS_Cplan_worry_2 <- lavaan(BLCS_Cplan_worry_2, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_Cplan_worry_2, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_Cplan_worry_2)
+paras_BLCS_Cplan_byworryfix_2<- parameterEstimates(fit_BLCS_Cplan_worry_2)[c(66,69,67,68), ]
+
+paras_BLCS_Cplan_byworryfix_2$label <- NULL
+paras_BLCS_Cplan_byworryfix_2
+rownames(paras_BLCS_Cplan_byworryfix_2) <- NULL
+
+compar <- rbind(paras_BLCS_Cplan_byworryfix, paras_BLCS_Cplan_byworryfix_1, paras_BLCS_Cplan_byworryfix_2)[-c(4,8,12), ]
+rownames(compar) <- NULL
+compar[, 7] <- format.pval(compar[ , 7], eps = .001, digits = 3)
+
+```
+
+```{r display_cpl_subscales_worry, include = T}
+kableExtra::kable(compar, booktabs = TRUE, format = 'html', digits = 3, escape = FALSE, caption = "Parameter estimates of a bivariate latent change score model for career planning and worry") %>%
+  kable_styling(position = 'left', full_width = F) %>%
+  pack_rows("All items", 1, 3) %>%
+  pack_rows("Items 1, 5, 6 (Decidedness)", 4, 6) %>%
+  pack_rows("Items 2, 3, 4 (Strategy)", 7, 9) %>%
+  row_spec(c(3,6,9), bold = T, color = "white", background = "#D7261E")
+```
+
+
+## BLCSM Career Planning - Self-efficacy  
+```{r bi_lcsm_se_cpl}
+names(my_dat)
+BLCS_se_cpl<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T2=~t1cpl_4")*t2cpl_4+equal("Cplan_T2=~t1cpl_5")*t2cpl_5+equal("Cplan_T2=~t1cpl_6")*t2cpl_6
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T1
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+
+t1cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+Cplan_T2 ~ 0*1    
+Cplan_T2 ~~ 0*Cplan_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dCplan_T1 ~ 1 
+Cplan_T1 ~ 1
+dCplan_T1 ~~ dCplan_T1
+Cplan_T1 ~~ Cplan_T1
+
+
+# This estimates the coupling
+
+dCplan_T1~Cplan_T1+SE_T1
+dSE_T1~Cplan_T1+SE_T1
+
+SE_T1 ~~ Cplan_T1
+dSE_T1 ~~ dCplan_T1
+'
+
+
+fit_BLCS_se_cpl <- lavaan(BLCS_se_cpl, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_se_cpl, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_se_cpl)
+paras_BLCS_se_cpl<- parameterEstimates(fit_BLCS_se_cpl)[c(115,118,116,117), ]
+paras_BLCS_se_cpl$label <- NULL
+paras_BLCS_se_cpl[4] <- round(paras_BLCS_se_cpl[4],3)
+paras_BLCS_se_cpl[8] <- round(paras_BLCS_se_cpl[8],3)
+paras_BLCS_se_cpl[9] <- round(paras_BLCS_se_cpl[9],3)
+rownames(paras_BLCS_se_cpl) <- NULL
+paras_BLCS_se_cpl[,7 ] <- format.pval(paras_BLCS_se_cpl[ , 7], eps = .001, digits = 3)
+paras_BLCS_se_cpl <- paras_BLCS_se_cpl %>% mutate(Est = glue("{est} 95%CI({ci.lower}, {ci.upper})"))
+fit_BLCS_Cplan_worry_meas <- generate_cfa_fitmeasures(fit_BLCS_Cplan_worry)
+for (i in seq_along(fit_BLCS_Cplan_worry_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_BLCS_se_cpl <- paras_BLCS_se_cpl[, c(1:3, 10, 7)]
+names(paras_BLCS_se_cpl) <- c("", "", "", "Est", "p")
+
+
+BLCS_se_cpl_meas <- generate_cfa_fitmeasures(fit_BLCS_se_cpl)
+for (i in seq_along(BLCS_se_cpl_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+```
+
+```{r display_blcs_cplan_se, include = T}
+library(kableExtra)
+knitr::kable(BLCS_se_cpl_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a bivariate latent change score model for career planning and self-efficacy") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_BLCS_se_cpl, booktabs = TRUE, digits = 3, format = 'html', escape = FALSE, caption = "Parameter estimates of a bivariate latent change score model for career planning and self-efficacy") %>%
+  kable_styling(position = 'left', full_width = F) %>%
+  pack_rows("Self-feedback", 1, 2) %>%
+  pack_rows("Coupling effect", 3, 4) %>%
+  row_spec(c(3,4), bold = T, color = "white", background = "#D7261E")
+```
+
+```{r display_BLCS_Cplan_se_path}
+semPaths(fit_BLCS_se_cpl, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, structural = TRUE, sizeMan = 4, sizeLat = 12, nCharNodes = 0, node.label.cex = 1.6, edge.label.cex = 2.5, fixedStyle = c("grey",3), curvePivot = TRUE, fade = FALSE, label.prop = 1.5)
+```
+
+```{r BLCS_cplan_sefixed}
+BLCS_cplan_sefixed<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T2=~t1cpl_4")*t2cpl_4+equal("Cplan_T2=~t1cpl_5")*t2cpl_5+equal("Cplan_T2=~t1cpl_6")*t2cpl_6
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T1
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+
+t1cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2     # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1           # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1          # This line constrains the intercept of Cplan_T2 to 0
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2     # Fixed regression of dSE_T1 on SE_T2
+SE_T2 ~ 0*1    
+SE_T2 ~~ 0*SE_T2
+
+
+dCplan_T1 ~~  dCplan_T1       # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2    # This estimates the variance of the Cplan_T1 
+
+dSE_T1 ~ 1 
+SE_T1 ~ 1
+dSE_T1 ~~ dSE_T1
+SE_T1 ~~ SE_T1
+
+
+#dCplan_T1~Cplan_T1+SE_T1 # This estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dSE_T1~SE_T1+Cplan_T1
+dCplan_T1~0*SE_T1+Cplan_T1
+
+Cplan_T1 ~~ SE_T1
+dCplan_T1 ~~ dSE_T1
+
+'
+
+fit_BLCS_cplan_sefixed <- lavaan(BLCS_cplan_sefixed, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_cplan_sefixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+```{r comp_BLCS_cplan_sefixed, include = T}
+# anova
+aov_cpl_free_fixed = anova(fit_BLCS_se_cpl, fit_BLCS_cplan_sefixed)
+aov_cpl_free_fixed
+aov_cpl_free_fixed[, 7][1] <- "-"
+options(knitr.kable.NA = '-')
+row.names(aov_cpl_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of self-efficacy constrained to zero")
+```
+
+
+```{r display_BLCS_cplan_sefixed, include = T}
+kable(aov_cpl_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 2,
+caption = 'Model comparison BLCSM Career planning - self-efficacy: Coupling effect of self-efficacy free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+```{r BLCS_se_cplanfixed}
+BLCS_se_cplanfixed<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T2=~t1cpl_4")*t2cpl_4+equal("Cplan_T2=~t1cpl_5")*t2cpl_5+equal("Cplan_T2=~t1cpl_6")*t2cpl_6
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T1
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+
+t1cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2     # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1           # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1          # This line constrains the intercept of Cplan_T2 to 0
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2     # Fixed regression of dSE_T1 on SE_T2
+SE_T2 ~ 0*1    
+SE_T2 ~~ 0*SE_T2
+
+
+dCplan_T1 ~~  dCplan_T1       # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2    # This estimates the variance of the Cplan_T1 
+
+dSE_T1 ~ 1 
+SE_T1 ~ 1
+dSE_T1 ~~ dSE_T1
+SE_T1 ~~ SE_T1
+
+
+#dCplan_T1~Cplan_T1+SE_T1 # This estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dSE_T1~SE_T1+0*Cplan_T1
+dCplan_T1~SE_T1+Cplan_T1
+
+Cplan_T1 ~~ SE_T1
+dCplan_T1 ~~ dSE_T1
+
+'
+
+fit_BLCS_se_cplanfixed <- lavaan(BLCS_se_cplanfixed, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_se_cplanfixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+```{r comp_BLCS_se_cplanfixed, include = T}
+# anova
+aov_cpl_free_fixed = anova(fit_BLCS_se_cpl, fit_BLCS_se_cplanfixed)
+options(knitr.kable.NA = '-')
+row.names(aov_cpl_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of career planning constrained to zero")
+```
+
+
+```{r display_BLCS_se_cplanfixed, include = T}
+kable(aov_cpl_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 3,
+caption = 'Model comparison BLCSM Career planning - self-efficacy: Coupling effect of career planning free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+## BLCSM Worry - Self-efficacy  
+```{r bi_lcsm_se_worry}
+BLCS_se_worry<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+SE_T1
+dSE_T1~Worry_T1+SE_T1
+
+SE_T1 ~~ Worry_T1
+dSE_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_se_worry <- lavaan(BLCS_se_worry, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_se_worry, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_se_worry)
+paras_BLCS_se_wor<- parameterEstimates(fit_BLCS_se_worry)[c(101,104,102,103), ]
+paras_BLCS_se_wor$label <- NULL
+
+paras_BLCS_se_wor[4] <- round(paras_BLCS_se_wor[4],3)
+paras_BLCS_se_wor[8] <- round(paras_BLCS_se_wor[8],3)
+paras_BLCS_se_wor[9] <- round(paras_BLCS_se_wor[9],3)
+rownames(paras_BLCS_se_wor) <- NULL
+paras_BLCS_se_wor[,7 ] <- format.pval(paras_BLCS_se_wor[ , 7], eps = .001, digits = 3)
+paras_BLCS_se_wor <- paras_BLCS_se_wor %>% mutate(Est = glue("{est} 95%CI({ci.lower}, {ci.upper})"))
+fit_BLCS_Cplan_worry_meas <- generate_cfa_fitmeasures(fit_BLCS_Cplan_worry)
+for (i in seq_along(fit_BLCS_Cplan_worry_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+paras_BLCS_se_wor <- paras_BLCS_se_wor[, c(1:3, 10, 7)]
+names(paras_BLCS_se_wor) <- c("", "", "", "Est", "p")
+
+
+BLCS_se_wor_meas <- generate_cfa_fitmeasures(fit_BLCS_se_worry)
+for (i in seq_along(BLCS_se_wor_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+
+```
+
+```{r display_blcs_wor_se, include = T}
+library(kableExtra)
+knitr::kable(BLCS_se_wor_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a bivariate latent change score model for self-efficacy and worry") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_BLCS_se_wor, booktabs = TRUE, digits = 3, format = 'html', escape = FALSE, caption = "Parameter estimates of a bivariate latent change score model for self-efficacy and worry") %>%
+  kable_styling(position = 'left', full_width = F) %>%
+  pack_rows("Self-feedback", 1, 2) %>%
+  pack_rows("Coupling effect", 3, 4) %>%
+  row_spec(c(3,4), bold = T, color = "white", background = "#D7261E")
+```
+
+```{r display_BLCS_wor_se_path}
+semPaths(fit_BLCS_se_worry, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, structural = TRUE, sizeMan = 4, sizeLat = 12, nCharNodes = 0, node.label.cex = 1.6, edge.label.cex = 2.5, fixedStyle = c("grey",3), curvePivot = TRUE, fade = FALSE, label.prop = 1.5)
+```
+
+```{r BLCS_se_worryfixed}
+BLCS_se_worryfixed<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+SE_T1
+dSE_T1~0*Worry_T1+SE_T1
+
+SE_T1 ~~ Worry_T1
+dSE_T1 ~~ dWorry_T1
+'
+fit_BLCS_se_worryfixed <- lavaan(BLCS_se_worryfixed, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_se_worryfixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+```{r comp_BLCS_se_worryfixed, include = T}
+# anova
+aov_free_fixed = anova(fit_BLCS_se_worry, fit_BLCS_se_worryfixed)
+options(knitr.kable.NA = '-')
+row.names(aov_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of worry constrained to zero")
+```
+
+
+```{r display_BLCS_se_worryfixed, include = T}
+kable(aov_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 3,
+caption = 'Model comparison BLCSM Self-efficacy - Worry: Coupling effect of Worry free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+```{r BLCS_worry_sefixed}
+BLCS_worry_sefixed<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+0*SE_T1
+dSE_T1~Worry_T1+SE_T1
+
+SE_T1 ~~ Worry_T1
+dSE_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_worry_sefixed <- lavaan(BLCS_worry_sefixed, data=no_na, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_worry_sefixed, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+```{r comp_BLCS_worry_sefixed, include = T}
+# anova
+aov_free_fixed = anova(fit_BLCS_se_worry, fit_BLCS_worry_sefixed)
+options(knitr.kable.NA = '-')
+row.names(aov_free_fixed)[1:2] = c("Free coupling effects", "Coupling effect of self-efficacy constrained to zero")
+```
+
+```{r display_BLCS_worry_sefixed, include = T}
+kable(aov_free_fixed, col.names = c("Df", "Chisq", "AIC", "BIC", "Chisq diff", "Df diff", "p"), escape=FALSE,format = "html", booktabs = TRUE, digits = 3,
+caption = 'Model comparison BLCSM Self-efficacy - Worry: Coupling effect of Self-efficacy free vs. constrained to zero') %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+## BLCSM - Multiple groups comparison 
+
+### BLCSM Career Planning - Worry (t2jobfound)
+```{r BLCS_Cplan_worry_t2jobfound}
+attributes(my_dat$t2job)
+
+mydat_multi <- my_dat %>% 
+  remove_all_labels(.)%>%
+     mutate_at("t2job", funs(dplyr::recode(., `1` = 2L, `3` = 2L, `2` = 1L, `4` = 1L)))
+
+BLCS_Cplan_worry<-'
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6  # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3
++equal("Cplan_T1=~t1cpl_4")*t2cpl_4+equal("Cplan_T1=~t1cpl_5")*t2cpl_5
++equal("Cplan_T1=~t1cpl_6")*t2cpl_6
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2   
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6 
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T2
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+t1cpl_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1             # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1            # This line constrains the intercept of Cplan_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dCplan_T1 ~~  dCplan_T1   # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2  # This estimates the variance of the Cplan_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+Cplan_T1
+dCplan_T1~0*Worry_T1+Cplan_T1
+
+Cplan_T1 ~~ Worry_T1
+dCplan_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_Cplan_worry <- lavaan(BLCS_Cplan_worry, data=mydat_multi, group = "t2job", estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_Cplan_worry, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_Cplan_worry)
+paras_fit_BLCS_Cplan_worry<- parameterEstimates(fit_BLCS_Cplan_worry)[c(87,90,88, 179, 182, 180), ]
+paras_fit_BLCS_Cplan_worry$label <- NULL
+paras_fit_BLCS_Cplan_worry$block <- NULL
+paras_fit_BLCS_Cplan_worry$group <- NULL
+paras_fit_BLCS_Cplan_worry
+paras_fit_BLCS_Cplan_worry[, 7] <- format.pval(paras_fit_BLCS_Cplan_worry[ , 7], eps = .001, digits = 3)
+rownames(paras_fit_BLCS_Cplan_worry) <- NULL
+
+BLCS_Cplan_worry_meas <- generate_cfa_fitmeasures(fit_BLCS_Cplan_worry)
+for (i in seq_along(BLCS_Cplan_worry_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+```
+
+```{r display_BLCS_Cplan_worry_t2jobfound, include = T}
+library(kableExtra)
+knitr::kable(BLCS_se_wor_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "Fit indices of a multigroup bivariate latent change score model for career planning and worry (job found at T2") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_fit_BLCS_Cplan_worry, booktabs = TRUE, digits = 3, format = 'html', escape = FALSE, caption = "Parameter estimates of a multigroup bivariate latent change score model for career planning and worry (job found at T2)") %>%
+  kable_styling(position = 'left', full_width = F) %>%
+  pack_rows("Group 1: Job found at T2", 1, 3) %>%
+  pack_rows("Group 2: No job found at T2", 4, 6) %>%
+  row_spec(c(3,6), bold = T, color = "white", background = "#D7261E")
+```
+
+```{r display_BLCS_Cplan_worry_t2jobfound_path}
+semPaths(fit_BLCS_Cplan_worry, what = "est", layout = "tree", intercepts = FALSE, residuals = FALSE, structural = TRUE, sizeMan = 4, sizeLat = 10, nCharNodes = 0, edge.label.cex = 1.3, fixedStyle = c("grey",3), curvePivot = TRUE)
+```
+
+```{r BLCS_Cplan_se_t2jobfound}
+mydat_multi <- my_dat %>% 
+  remove_all_labels(.) %>%
+     mutate_at("t2job", funs(dplyr::recode(., `1` = 2L, `3` = 2L, `2` = 1L, `4` = 1L)))
+
+BLCS_cplan_se<-'
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+
+t1se_1~~t2se_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1se_2~~t2se_2   
+t1se_3~~t2se_3
+t1se_4~~t2se_4
+t1se_5~~t2se_5
+t1se_6~~t2se_6 
+t1se_7~~t2se_7
+t1se_8~~t2se_8
+
+t1se_1~~t1se_1   # This allows residual variance on indicator 1 at T1
+t1se_2~~t1se_2  
+t1se_3~~t1se_3
+t1se_4~~t1se_4
+t1se_5~~t1se_5
+t1se_6~~t1se_6
+t1se_7~~t1se_7
+t1se_8~~t1se_8
+
+t2se_1~~t2se_1   # This allows residual variance on indicator 1 at T2
+t2se_2~~t2se_2  
+t2se_3~~t2se_3
+t2se_4~~t2se_4
+t2se_5~~t2se_5
+t2se_6~~t2se_6
+t2se_7~~t2se_7
+t2se_8~~t2se_8
+
+t1se_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1se_2~1                 
+t1se_3~1 
+t1se_4~1 
+t1se_5~1 
+t1se_6~1 
+t1se_7~1 
+t1se_8~1 
+
+t2se_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2se_2~equal("t1se_2~1")*1 
+t2se_3~equal("t1se_3~1")*1
+t2se_4~equal("t1se_4~1")*1
+t2se_5~equal("t1se_5~1")*1
+t2se_6~equal("t1se_6~1")*1
+t2se_7~equal("t1se_7~1")*1
+t2se_8~equal("t1se_8~1")*1
+
+
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T2=~t1cpl_4")*t2cpl_4+equal("Cplan_T2=~t1cpl_5")*t2cpl_5+equal("Cplan_T2=~t1cpl_6")*t2cpl_6
+
+
+t1cpl_1~~t2cpl_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cpl_2~~t2cpl_2
+t1cpl_3~~t2cpl_3
+t1cpl_4~~t2cpl_4
+t1cpl_5~~t2cpl_5
+t1cpl_6~~t2cpl_6
+
+t1cpl_1~~t1cpl_1   # This allows residual variance on indicator 1 at T1
+t1cpl_2~~t1cpl_2  
+t1cpl_3~~t1cpl_3
+t1cpl_4~~t1cpl_4
+t1cpl_5~~t1cpl_5
+t1cpl_6~~t1cpl_6
+
+
+t2cpl_1~~t2cpl_1   # This allows residual variance on indicator 1 at T1
+t2cpl_2~~t2cpl_2  
+t2cpl_3~~t2cpl_3
+t2cpl_4~~t2cpl_4
+t2cpl_5~~t2cpl_5
+t2cpl_6~~t2cpl_6
+
+
+t1cpl_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1cpl_2~1                 
+t1cpl_3~1 
+t1cpl_4~1 
+t1cpl_5~1 
+t1cpl_6~1 
+
+
+t2cpl_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2cpl_2~equal("t1cpl_2~1")*1 
+t2cpl_3~equal("t1cpl_3~1")*1
+t2cpl_4~equal("t1cpl_4~1")*1
+t2cpl_5~equal("t1cpl_5~1")*1
+t2cpl_6~equal("t1cpl_6~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2     # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1           # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1          # This line constrains the intercept of Cplan_T2 to 0
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2     # Fixed regression of dSE_T1 on SE_T2
+SE_T2 ~ 0*1    
+SE_T2 ~~ 0*SE_T2
+
+
+dCplan_T1 ~~  dCplan_T1       # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2    # This estimates the variance of the Cplan_T1 
+
+dSE_T1 ~ 1 
+SE_T1 ~ 1
+dSE_T1 ~~ dSE_T1
+SE_T1 ~~ SE_T1
+
+
+#dCplan_T1~Cplan_T1+SE_T1 # This estimates the Cplan to Worry 
+# coupling parameter and the Worry to Worry self-feedback
+
+dSE_T1~SE_T1+Cplan_T1
+dCplan_T1~0*SE_T1+Cplan_T1
+
+Cplan_T1 ~~ SE_T1
+dCplan_T1 ~~ dSE_T1
+
+'
+
+fit_BLCS_cplan_se <- lavaan(BLCS_cplan_se, data=mydat_multi, group = "t2job", estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_cplan_se, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+
+parameterEstimates(fit_BLCS_cplan_se)
+paras_fit_BLCS_cplan_se<- parameterEstimates(fit_BLCS_cplan_se)[c(115, 118, 116, 235, 238, 236), ]
+paras_fit_BLCS_cplan_se$label <- NULL
+paras_fit_BLCS_cplan_se
+paras_fit_BLCS_cplan_se[, 7] <- format.pval(paras_fit_BLCS_cplan_se[ , 7], eps = .001, digits = 3)
+rownames(paras_fit_BLCS_cplan_se) <- NULL
+
+fit_BLCS_cplan_se_meas <- generate_cfa_fitmeasures(fit_BLCS_cplan_se)
+for (i in seq_along(fit_BLCS_cplan_se_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+```
+
+# Mediation 
+## The effect of T1 Career planning on T2 Worry 'mediated' by T1 Self-efficacy
+```{r med_cpl_se_wo}
+t1cplan_t1se_t2worry <- '
+# measurement model:
+t1cpl =~ t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6
+t1se =~ t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8 
+t2wor =~ t2wor_1 + t2wor_2 + t2wor_3+ t2wor_4
+
+t2wor ~ b*t1se + c* t1cpl
+t1se ~ a*t1cpl 
+indirect := a * b
+total    := c + (a * b)
+'
+set.seed(1234)
+fit_t1cplan_t1se_t2worry <- lavaan::sem(model = t1cplan_t1se_t2worry, data = no_na, se = "bootstrap", bootstrap = 100, missing = "fiml")
+summary(fit_t1cplan_t1se_t2worry, fit.measures=TRUE, standardize=F, rsquare=TRUE, 
+        estimates = TRUE, ci = TRUE)
+
+library(lavaan)
+parameterEstimates(fit_t1cplan_t1se_t2worry)
+paras_fit_t1cplan_t1se_t2worry<- parameterEstimates(fit_t1cplan_t1se_t2worry)[c(64,65), ]
+paras_fit_t1cplan_t1se_t2worry$label <- NULL
+paras_fit_t1cplan_t1se_t2worry[, 7] <- format.pval(paras_fit_t1cplan_t1se_t2worry[ , 7], eps = .001, digits = 3)
+rownames(paras_fit_t1cplan_t1se_t2worry) <- NULL
+
+library(glue)
+BLCS_Cplan_worry_meas <- generate_cfa_fitmeasures(fit_t1cplan_t1se_t2worry)
+for (i in seq_along(BLCS_Cplan_worry_meas)) {
+    if (is.numeric(i)) {
+      round(i, 3)
+    }
+}
+```
+
+# CLPM unconstrained paths 
+
+```{r clpm, include = T, echo = F, warning=F}
+library(lavaan)
+clpm <- '
+SE_T1=~1*t1se_1+t1se_2+t1se_3+t1se_4+t1se_5+t1se_6+t1se_7+t1se_8  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2se_1+equal("SE_T1=~t1se_2")*t2se_2+equal("SE_T1=~t1se_3")*t2se_3
++equal("SE_T1=~t1se_4")*t2se_4+equal("SE_T1=~t1se_5")*t2se_5+equal("SE_T1=~t1se_6")*t2se_6+equal("SE_T1=~t1se_7")*t2se_7+equal("SE_T1=~t1se_8")*t2se_8
+
+Cplan_T1=~1*t1cpl_1+t1cpl_2+t1cpl_3+t1cpl_4+t1cpl_5+t1cpl_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cpl_1+equal("Cplan_T1=~t1cpl_2")*t2cpl_2+equal("Cplan_T1=~t1cpl_3")*t2cpl_3+equal("Cplan_T2=~t1cpl_4")*t2cpl_4+equal("Cplan_T2=~t1cpl_5")*t2cpl_5+equal("Cplan_T2=~t1cpl_6")*t2cpl_6
+
+
+# Define phantom latent variables
+etaSE_T1 =~ 1*SE_T1
+etaSE_T2 =~ 1*SE_T2
+
+etaCplan_T1 =~ 1*Cplan_T1
+etaCplan_T2 =~ 1*Cplan_T2
+
+# Autoregressive effects
+etaSE_T2 ~ a1*etaSE_T1
+
+etaCplan_T2 ~ a2*etaCplan_T1
+
+# Crosslagged effects
+etaCplan_T2 ~ c1*etaSE_T1
+etaSE_T2 ~ c2*etaCplan_T1
+
+# 1. Set error variances of the observed variables to zero
+SE_T1 ~~ 0*SE_T1
+SE_T2 ~~ 0*SE_T2
+
+Cplan_T1 ~~ 0*Cplan_T1
+Cplan_T2 ~~ 0*Cplan_T2
+
+# 2. Set the variance of the latent variables, except the first one, to the same value
+etaSE_T2 ~~ varx*etaSE_T2
+
+etaCplan_T2 ~~ vary*etaCplan_T2
+
+
+# 3. Define the variance and the covariance for the first latent variable
+
+etaSE_T1 ~~ varSE_T1*etaSE_T1
+etaCplan_T1 ~~ varCplan_T1*etaCplan_T1
+
+# 4. Finally, we estimate the covariance between the latents of x and y
+#    of the first time point, the second time-point and so on. note that
+#    for the second to fourth time point the correlation is constrained to
+#    the same value
+
+etaSE_T1 ~~ cov1*etaCplan_T1
+etaSE_T2 ~~ cove*etaCplan_T2
+
+# 5. The model also contains a mean structure and we have to define some
+#    constraints for this part of the model. We set the intercepts of the 
+#    observed indicators to zero and estimate the means of the latent
+#    variables:
+
+SE_T1 ~ 0*1
+SE_T2 ~ 0*1
+
+Cplan_T1 ~ 0*1
+Cplan_T2 ~ 0*1
+
+etaSE_T1 ~ 1
+etaSE_T2 ~ 1
+
+etaCplan_T1 ~ 1
+etaCplan_T2 ~ 1
+
+
+## define correlations
+cor1 := cov1 / (sqrt(varSE_T1) * sqrt(varCplan_T1))
+'
+
+fit <- sem(clpm, data = no_na, missing = "FIML")
+summary(fit, fit.measures = T)
+
+```
+
+```{r display_med_cpl_se_wo, include = T}
+library(kableExtra)
+knitr::kable(BLCS_Cplan_worry_meas, escape=FALSE, digits = 3, format = "html", booktabs = TRUE, caption = "The effect of career planning on worry mediated by self-efficacy: Model Fit") %>%
+  kable_styling(position = 'left', full_width = F) 
+
+kableExtra::kable(paras_fit_t1cplan_t1se_t2worry, booktabs = TRUE, digits = 3, format = 'html', escape = FALSE, caption = "The effect of career planning on worry mediate' by self-efficacy: Inirect and total effect") %>%
+  kable_styling(position = 'left', full_width = F) 
+```
+
+
+
+# Replication 
+
+## BLCSM: Career Planning - Worry 
+
+```{r blcs_cplan_worry}
+library(lavaan)
+library(glue)
+
+BLCS_Cplan_worry<-'
+Cplan_T1=~1*t1cplan_1+t1cplan_2+t1cplan_3+t1cplan_4+t1cplan_5+t1cplan_6  # This specifies the measurement model for Cplan_T1 
+Cplan_T2=~1*t2cplan_1+equal("Cplan_T1=~t1cplan_2")*t2cplan_2+equal("Cplan_T1=~t1cplan_3")*t2cplan_3
++equal("Cplan_T1=~t1cplan_4")*t2cplan_4+equal("Cplan_T1=~t1cplan_5")*t2cplan_5
++equal("Cplan_T1=~t1cplan_6")*t2cplan_6
+
+t1cplan_1~~t2cplan_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cplan_2~~t2cplan_2   
+t1cplan_3~~t2cplan_3
+t1cplan_4~~t2cplan_4
+t1cplan_5~~t2cplan_5
+t1cplan_6~~t2cplan_6 
+
+t1cplan_1~~t1cplan_1   # This allows residual variance on indicator 1 at T1
+t1cplan_2~~t1cplan_2  
+t1cplan_3~~t1cplan_3
+t1cplan_4~~t1cplan_4
+t1cplan_5~~t1cplan_5
+t1cplan_6~~t1cplan_6
+
+t2cplan_1~~t2cplan_1   # This allows residual variance on indicator 1 at T2
+t2cplan_2~~t2cplan_2  
+t2cplan_3~~t2cplan_3
+t2cplan_4~~t2cplan_4
+t2cplan_5~~t2cplan_5
+t2cplan_6~~t2cplan_6
+
+t1cplan_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cplan_2~1                 
+t1cplan_3~1 
+t1cplan_4~1 
+t1cplan_5~1 
+t1cplan_6~1 
+
+
+t2cplan_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cplan_2~equal("t1cplan_2~1")*1 
+t2cplan_3~equal("t1cplan_3~1")*1
+t2cplan_4~equal("t1cplan_4~1")*1
+t2cplan_5~equal("t1cplan_5~1")*1
+t2cplan_6~equal("t1cplan_6~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+dCplan_T1 ~ 1             # This estimates the intercept of the change score 
+Cplan_T1 ~  1             # This estimates the intercept of Cplan_T1 
+Cplan_T2 ~ 0*1            # This line constrains the intercept of Cplan_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dCplan_T1 ~~  dCplan_T1   # This estimates the variance of the change scores 
+Cplan_T1 ~~   Cplan_T1    # This estimates the variance of the Cplan_T1 
+Cplan_T2 ~~   0*Cplan_T2  # This estimates the variance of the Cplan_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+Cplan_T1
+dCplan_T1~Worry_T1+Cplan_T1
+
+Cplan_T1 ~~ Worry_T1
+dCplan_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_Cplan_worry <- lavaan(BLCS_Cplan_worry, data=raw_data_Grad2, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_Cplan_worry, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+
+## BLCSM Career Planning - Career confidence  
+```{r bi_lcsm_se_cplan}
+names(my_dat)
+BLCS_cconf_cpl<-'
+SE_T1=~1*t1cconf_1+t1cconf_2+t1cconf_3+t1cconf_4  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2cconf_1+equal("SE_T1=~t1cconf_2")*t2cconf_2+equal("SE_T1=~t1cconf_3")*t2cconf_3
++equal("SE_T1=~t1cconf_4")*t2cconf_4
+
+t1cconf_1~~t2cconf_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cconf_2~~t2cconf_2   
+t1cconf_3~~t2cconf_3
+t1cconf_4~~t2cconf_4
+
+t1cconf_1~~t1cconf_1   # This allows residual variance on indicator 1 at T1
+t1cconf_2~~t1cconf_2  
+t1cconf_3~~t1cconf_3
+t1cconf_4~~t1cconf_4
+
+
+t2cconf_1~~t2cconf_1   # This allows residual variance on indicator 1 at T2
+t2cconf_2~~t2cconf_2  
+t2cconf_3~~t2cconf_3
+t2cconf_4~~t2cconf_4
+
+t1cconf_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cconf_2~1                 
+t1cconf_3~1 
+t1cconf_4~1 
+
+t2cconf_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cconf_2~equal("t1cconf_2~1")*1 
+t2cconf_3~equal("t1cconf_3~1")*1
+t2cconf_4~equal("t1cconf_4~1")*1
+
+
+Cplan_T1=~1*t1cplan_1+t1cplan_2+t1cplan_3+t1cplan_4+t1cplan_5+t1cplan_6      # This specifies the measurement model 
+Cplan_T2=~1*t2cplan_1+equal("Cplan_T1=~t1cplan_2")*t2cplan_2+equal("Cplan_T1=~t1cplan_3")*t2cplan_3+equal("Cplan_T2=~t1cplan_4")*t2cplan_4+equal("Cplan_T2=~t1cplan_5")*t2cplan_5+equal("Cplan_T2=~t1cplan_6")*t2cplan_6
+
+
+t1cplan_1~~t2cplan_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cplan_2~~t2cplan_2
+t1cplan_3~~t2cplan_3
+t1cplan_4~~t2cplan_4
+t1cplan_5~~t2cplan_5
+t1cplan_6~~t2cplan_6
+
+t1cplan_1~~t1cplan_1   # This allows residual variance on indicator 1 at T1
+t1cplan_2~~t1cplan_2  
+t1cplan_3~~t1cplan_3
+t1cplan_4~~t1cplan_4
+t1cplan_5~~t1cplan_5
+t1cplan_6~~t1cplan_6
+
+
+t2cplan_1~~t2cplan_1   # This allows residual variance on indicator 1 at T1
+t2cplan_2~~t2cplan_2  
+t2cplan_3~~t2cplan_3
+t2cplan_4~~t2cplan_4
+t2cplan_5~~t2cplan_5
+t2cplan_6~~t2cplan_6
+
+
+t1cplan_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1cplan_2~1                 
+t1cplan_3~1 
+t1cplan_4~1 
+t1cplan_5~1 
+t1cplan_6~1 
+
+
+t2cplan_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2cplan_2~equal("t1cplan_2~1")*1 
+t2cplan_3~equal("t1cplan_3~1")*1
+t2cplan_4~equal("t1cplan_4~1")*1
+t2cplan_5~equal("t1cplan_5~1")*1
+t2cplan_6~equal("t1cplan_6~1")*1
+
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Cplan_T2 ~ 1*Cplan_T1     # Fixed regression of Cplan_T2 on Cplan_T1
+dCplan_T1 =~ 1*Cplan_T2   # Fixed regression of dCplan_T1 on Cplan_T2
+Cplan_T2 ~ 0*1    
+Cplan_T2 ~~ 0*Cplan_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dCplan_T1 ~ 1 
+Cplan_T1 ~ 1
+dCplan_T1 ~~ dCplan_T1
+Cplan_T1 ~~ Cplan_T1
+
+
+# This estimates the coupling
+
+dCplan_T1~Cplan_T1+SE_T1
+dSE_T1~Cplan_T1+SE_T1
+
+SE_T1 ~~ Cplan_T1
+dSE_T1 ~~ dCplan_T1
+'
+
+
+fit_BLCS_cconf_cpl <- lavaan(BLCS_cconf_cpl, data=raw_data_Grad2, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_cconf_cpl, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+## BLCSM Worry - Self-efficacy  
+```{r bi_lcsm_cconf_worry}
+BLCS_cconf_worry<-'
+SE_T1=~1*t1cconf_1+t1cconf_2+t1cconf_3+t1cconf_4  # This specifies the measurement model for SE_T1 
+SE_T2=~1*t2cconf_1+equal("SE_T1=~t1cconf_2")*t2cconf_2+equal("SE_T1=~t1cconf_3")*t2cconf_3
++equal("SE_T1=~t1cconf_4")*t2cconf_4
+
+
+t1cconf_1~~t2cconf_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1cconf_2~~t2cconf_2   
+t1cconf_3~~t2cconf_3
+t1cconf_4~~t2cconf_4
+
+t1cconf_1~~t1cconf_1   # This allows residual variance on indicator 1 at T1
+t1cconf_2~~t1cconf_2  
+t1cconf_3~~t1cconf_3
+t1cconf_4~~t1cconf_4
+
+t2cconf_1~~t2cconf_1   # This allows residual variance on indicator 1 at T2
+t2cconf_2~~t2cconf_2  
+t2cconf_3~~t2cconf_3
+t2cconf_4~~t2cconf_4
+
+t1cconf_1~0*1   # This constrains the intercept of ind 1 to 0 at T1
+t1cconf_2~1                 
+t1cconf_3~1 
+t1cconf_4~1 
+
+t2cconf_1~0*1    # This constrains the intercept of ind 1 to 0 at T2
+t2cconf_2~equal("t1cconf_2~1")*1 
+t2cconf_3~equal("t1cconf_3~1")*1
+t2cconf_4~equal("t1cconf4~1")*1
+
+Worry_T1=~1*t1wor_1+t1wor_2+t1wor_3+t1wor_4      # This specifies the measurement model 
+Worry_T2=~1*t2wor_1+equal("Worry_T1=~t1wor_2")*t2wor_2+equal("Worry_T1=~t1wor_3")*t2wor_3+equal("Worry_T2=~t1wor_4")*t2wor_4
+
+
+t1wor_1~~t2wor_1   # This allows residual covariance on indicator 1 across T1 and T2
+t1wor_2~~t2wor_2
+t1wor_3~~t2wor_3
+t1wor_4~~t2wor_4
+
+t1wor_1~~t1wor_1   # This allows residual variance on indicator 1 at T1
+t1wor_2~~t1wor_2  
+t1wor_3~~t1wor_3
+t1wor_4~~t1wor_4
+
+t2wor_1~~t2wor_1   # This allows residual variance on indicator 1 at T1
+t2wor_2~~t2wor_2  
+t2wor_3~~t2wor_3
+t2wor_4~~t2wor_4
+
+t1wor_1~0*1    # This constrains the intercept of ind 1 to 0 at T1
+t1wor_2~1                 
+t1wor_3~1 
+t1wor_4~1 
+
+t2wor_1~0*1       # This constrains the intercept of ind 1 to 0 at T2
+t2wor_2~equal("t1wor_2~1")*1 
+t2wor_3~equal("t1wor_3~1")*1
+t2wor_4~equal("t1wor_4~1")*1
+
+
+SE_T2 ~ 1*SE_T1     # Fixed regression of SE_T2 on SE_T1
+dSE_T1 =~ 1*SE_T2   # Fixed regression of dSE_T1 on SE_T2
+dSE_T1 ~ 1             # This estimates the intercept of the change score 
+SE_T1 ~  1             # This estimates the intercept of SE_T1 
+SE_T2 ~ 0*1            # This line constrains the intercept of SE_T2 to 0
+
+
+Worry_T2 ~ 1*Worry_T1     # Fixed regression of Worry_T2 on Worry_T1
+dWorry_T1 =~ 1*Worry_T2   # Fixed regression of dWorry_T1 on Worry_T2
+Worry_T2 ~ 0*1    
+Worry_T2 ~~ 0*Worry_T2
+
+
+dSE_T1 ~~  dSE_T1   # This estimates the variance of the change scores 
+SE_T1 ~~   SE_T1    # This estimates the variance of the SE_T1 
+SE_T2 ~~   0*SE_T2  # This estimates the variance of the SE_T1 
+
+dWorry_T1 ~ 1 
+Worry_T1 ~ 1
+dWorry_T1 ~~ dWorry_T1
+Worry_T1 ~~ Worry_T1
+
+
+# This estimates the coupling
+
+dWorry_T1~Worry_T1+SE_T1
+dSE_T1~Worry_T1+SE_T1
+
+SE_T1 ~~ Worry_T1
+dSE_T1 ~~ dWorry_T1
+'
+
+fit_BLCS_cconf_worry <- lavaan(BLCS_cconf_worry, data=raw_data_Grad2, estimator='mlr',fixed.x=FALSE,missing='fiml')
+summary(fit_BLCS_cconf_worry, fit.measures=TRUE, standardized=TRUE, rsquare=TRUE)
+```
+
+# References

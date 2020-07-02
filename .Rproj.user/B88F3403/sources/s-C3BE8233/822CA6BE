@@ -1,0 +1,25 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1593686196581.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "822CA6BE",
+    "lastKnownWriteTime" : 1593545160,
+    "last_content_update" : 1593545160,
+    "path" : "~/Dropbox/Collaboration_RUG transition to work_shared/UK study/R_Code/UK_Study/UK_Report_full.Rmd",
+    "project_path" : "UK_Report_full.Rmd",
+    "properties" : {
+        "cursorPosition" : "29,0",
+        "scrollLine" : "8"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}
